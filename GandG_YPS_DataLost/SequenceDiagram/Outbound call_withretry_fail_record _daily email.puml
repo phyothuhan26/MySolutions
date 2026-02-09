@@ -1,54 +1,42 @@
 @startuml
-title Outbound call to G&G with Retry + Fail Record + Email Digest
+title YPS Side: Retry & Uploading File Server
 hide footbox
-actor "Business Flow\n(Controller/Job)" as FLOW
-participant "IntegrationService" as SVC
-participant "G&G API\n(External)" as GG
-database "fail_record\n(MySQL)" as FAILDB
-participant "EmailScheduler" as SCH
-participant "ExcelExporter" as XLS
-participant "MailSender" as MAIL
+actor "YPS Client / Job" as YPS
+participant "G&G API" as API
+database "failure_list" as FAIL
+participant "Scheduler (EOD)" as SCH
+participant "File Server" as FS
+participant "Email Service (SMTP)" as MAIL
 
-FLOW -> SVC: callGg(payload, censq)
+== Transaction call ==
+YPS -> API: Call operation (timeout=15s)
+activate API
 
-note right of SVC
-Timeout = 15s
-Retry: maxAttempts=4
-Wait = 5 minutes between attempts
-(technical failures only)
-end note
+alt Success
+  API --> YPS: Success response
+else Timeout / failure
+  API --> YPS: Failure / timeout
 
-loop attempt 1..4
-  SVC -> GG: HTTP request (censq, payload)
-  alt success (000000 / 2xx)
-    GG --> SVC: success
-    break
-  else retryable failure (timeout/5xx/network)
-    GG --> SVC: error/timeout
-    SVC -> SVC: wait 5 minutes
-  else non-retryable failure (business reject)
-    GG --> SVC: business error
-    break
+  loop Retry (max 4 times, delay 5 minutes)
+    YPS -> API: Retry operation
+    API --> YPS: Success or Failure
+  end
+
+  alt Still failed after max retries
+    YPS -> FAIL: Insert failed transaction\n(as JSON payload)
+    FAIL --> YPS: Saved
   end
 end
+deactivate API
 
-alt still failed after max retry OR non-retryable
-  SVC -> FAILDB: insert fail_record(censq,payload,error,retry_count,status=FAILED)
-  SVC --> FLOW: handled (recorded to fail list)
-else success
-  SVC --> FLOW: done
-end
+== End of Day ==
+SCH -> FAIL: Fetch all failed records for today
+FAIL --> SCH: Failed record list
 
-== Twice-daily digest ==
-SCH -> FAILDB: fetch failed records (status=FAILED, not emailed)
-FAILDB --> SCH: records
-alt records exist
-  SCH -> XLS: generateExcel(records)
-  XLS --> SCH: xlsx bytes
-  SCH -> MAIL: send email with xlsx attachment
-  SCH -> FAILDB: mark records as emailed (emailed_at, batch_id)
-else none
-  SCH --> SCH: skip (optional)
-end
+SCH -> SCH: Generate Excel file
+SCH -> FS: Upload Excel file to file server
+FS --> SCH: Upload success
 
+SCH -> MAIL: Send email with file link/path\n(or attach Excel if required)
+MAIL --> SCH: Email sent
 @enduml

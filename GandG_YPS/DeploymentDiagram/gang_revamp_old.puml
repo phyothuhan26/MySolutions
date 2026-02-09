@@ -1,0 +1,126 @@
+@startuml
+title G&G Revamp
+
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultTextAlignment center
+
+skinparam package {
+  BorderStyle dashed
+  BorderThickness 1
+}
+skinparam rectangle {
+  RoundCorner 18
+  BorderThickness 1
+}
+
+left to right direction
+skinparam nodesep 40
+skinparam ranksep 35
+
+' ---------- ACTOR ----------
+actor Staff as staff
+
+' ---------- POS DEVICES ----------
+package "POS Device" as posZone {
+  rectangle "YPS POS" as posYps
+  rectangle "Sunmi POS" as posSunmi
+}
+
+' ---------- EXTERNAL SERVICES ----------
+package "External Services" as extZone {
+  rectangle "YPS Service" as ypsSvc
+  package "Mobile Service" as mobZone {
+    rectangle "MPT" as mpt
+    rectangle "ATOM" as atom
+  }
+}
+
+' ---------- FRONTEND ----------
+package "G&G FrontEnd" as feZone {
+  rectangle "Eservice" as eservice
+}
+
+' ---------- CLOUD HOSTED ----------
+package "Alibaba Cloud" as cloudZone {
+  package "G&G Middleware" as mwZone {
+    rectangle "G&G Backend" as backend
+    queue "RabbitMQ" as mq
+  }
+  rectangle "Sale Service" as saleSvc
+}
+
+' ---------- DB ----------
+package "Database" as dbZone {
+  database "Integration DB" as integDB
+  database "YPS Integration DB" as ypsIntegDB
+  database "QueueProcess DB" as qpDB
+  database "Sale DB" as saleDB
+  database "Sale Old DB" as saleOldDB
+}
+
+' ---------- ERP ----------
+rectangle "Microsoft AX" as ax
+
+' =========================================================
+' LAYOUT HELPERS (HIDDEN LINKS)  ✅ no right/down with hidden
+' =========================================================
+
+' Force main service chain in one top row
+posYps   -[hidden]-> posSunmi
+posSunmi -[hidden]-> ypsSvc
+ypsSvc   -[hidden]-> eservice
+eservice -[hidden]-> backend
+backend  -[hidden]-> mq
+mq       -[hidden]-> saleSvc
+saleSvc  -[hidden]-> ax
+
+' Force DBs to bottom by anchoring them to backend / saleSvc
+backend -[hidden]-> integDB
+backend -[hidden]-> ypsIntegDB
+backend -[hidden]-> qpDB
+saleSvc -[hidden]-> saleDB
+saleDB  -[hidden]-> saleOldDB
+
+' Keep DBs aligned in one bottom row
+integDB    -[hidden]-> ypsIntegDB
+ypsIntegDB -[hidden]-> qpDB
+qpDB       -[hidden]-> saleDB
+
+' =========================================================
+' FLOWS (REAL ARROWS) ✅ directional arrows allowed here
+' =========================================================
+
+' Staff access
+staff -right-> posZone
+staff -down-> eservice : HTTPS
+
+' POS to YPS
+posZone   -right-> ypsSvc
+
+' Frontend calls
+eservice -right-> backend : HTTPS
+eservice -up-> mpt : HTTPS
+eservice -up-> atom : HTTPS
+
+' Callback
+ypsSvc -down-> backend : Callback
+
+' Backend to DB + MQ
+backend -down-> integDB : JDBC (connection)
+backend -down-> qpDB : (mq_status, retry_count)
+backend -down-> ypsIntegDB : YPS data store separate
+backend -right-> mq : AMQP (publish)
+
+' MQ processing
+mq -right-> saleSvc : AMQP (consume)
+mq -down-> qpDB : update processing status
+
+' Sale service integrations
+saleSvc -down-> saleDB : JDBC
+saleSvc -right-> ax : Integration
+
+' Archive
+saleDB -right-> saleOldDB : Archive data per year
+
+@enduml

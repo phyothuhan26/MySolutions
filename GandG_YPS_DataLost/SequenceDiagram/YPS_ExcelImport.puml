@@ -1,0 +1,38 @@
+@startuml
+title G&G Side: Excel Import (Scheduler) + Rollback if Any Insert Fails
+hide footbox
+participant "Scheduler" as SCH
+participant "File Server" as FS
+participant "G&G Import Service" as IMP
+database "yps_integration" as DB
+
+SCH -> FS: Access file server and get failed Excel list
+FS --> SCH: Excel file
+SCH -> IMP: Import failed Excel list
+
+activate IMP
+IMP -> DB: BEGIN TRANSACTION
+activate DB
+
+loop For each record in Excel
+  IMP -> DB: INSERT record into yps_integration
+  alt Insert failed
+    DB --> IMP: Error
+    IMP -> DB: ROLLBACK
+    DB --> IMP: Rolled back
+    IMP --> SCH: Import failed (rollback done)
+    deactivate DB
+    deactivate IMP
+    return
+  else Insert success
+    DB --> IMP: OK
+  end
+end
+
+IMP -> DB: COMMIT
+DB --> IMP: Committed
+deactivate DB
+
+IMP --> SCH: Import success
+deactivate IMP
+@enduml
