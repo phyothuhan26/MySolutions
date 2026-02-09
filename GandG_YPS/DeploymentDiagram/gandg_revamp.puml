@@ -1,5 +1,5 @@
 @startuml
-title YPS / ABC / Sale / AX Deployment (Clean, No External Lib)
+title G&G Revamp
 
 skinparam shadowing false
 skinparam linetype ortho
@@ -17,7 +17,7 @@ skinparam rectangle {
 }
 
 ' ---------- ACTORS / DEVICES ----------
-actor User
+actor Staff
 rectangle "YPS POS Device" as POS
 
 ' ---------- EXTERNAL SERVICES ----------
@@ -28,7 +28,7 @@ package "External Services" {
 }
 
 ' ---------- FRONTEND ----------
-package "ABC FrontEnd" {
+package "G&G FrontEnd" {
   rectangle "YPS Eservice"
   rectangle "Eservice"
 }
@@ -36,29 +36,38 @@ package "ABC FrontEnd" {
 ' ---------- AWS HOSTED ----------
 package "AWS Cloud" {
 
-  package "ABC Middleware" {
-    rectangle "ABC Service"
+  package "G&G Middleware" {
+    rectangle "G&G Backend"
     queue "RabbitMQ"
   }
 
   rectangle "Sale Service"
-  database "DB"
+
 }
+' ---------- DB  ----------
+package "Database " {
+ database "Integration DB"
+ database "YPS Integration DB"
+  database "Sale DB"
+}
+
 
 ' ---------- ERP ----------
 rectangle "Microsoft AX"
 
 ' ---------- FLOWS ----------
-User --> "YPS Eservice"
-"YPS Eservice" --> "ABC Service" : HTTPS
-
-"ABC Service" --> RabbitMQ : AMQP (publish)
+Staff --> "G&G FrontEnd":HTTPS
+Staff --> POS
+"G&G FrontEnd" --> "G&G Middleware" : HTTPS
+"G&G Backend" --> "Integration DB": JDBC(connection)
+"G&G Backend" --> "YPS Integration DB": YPS data store seperate
+"G&G Backend" --> RabbitMQ : AMQP (publish)
 RabbitMQ --> "Sale Service" : AMQP (consume)
 
-"Sale Service" --> DB : JDBC
+"Sale Service" --> "Sale DB" : JDBC
 "Sale Service" --> "Microsoft AX" : Integration
 
 POS --> "YPS Service"
-"YPS Service" --> "ABC Service" : Callback
+"YPS Service" --> "G&G Middleware" : Callback
 
 @enduml
