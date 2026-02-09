@@ -1,0 +1,38 @@
+@startuml
+hide footbox
+autoactivate off
+title G&G Side: YPS Submit with Idempotency (Upsert)
+
+actor "YPS Service" as YPS
+participant "G&G API\n/submit" as API
+database "yps_integration\n(MySQL)" as YPSDB
+
+YPS -> API: submit(censq, data)
+activate API
+
+API -> YPSDB: SELECT by censq
+activate YPSDB
+YPSDB --> API: found? (yes/no)
+deactivate YPSDB
+
+alt not found
+  API -> YPSDB: INSERT(censq, increment_time=1,\nlast_increment=now, status=NEW, payload=data)
+  activate YPSDB
+  YPSDB --> API: inserted
+  deactivate YPSDB
+else found (duplicate / retry)
+  API -> YPSDB: UPDATE increment_time=increment_time+1,\nlast_increment=now, payload=latest(optional)
+  activate YPSDB
+  YPSDB --> API: updated
+  deactivate YPSDB
+end
+
+note right of API
+Return success even on duplicates
+=> idempotent behavior
+end note
+
+API --> YPS: 000000
+deactivate API
+
+@enduml

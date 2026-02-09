@@ -1,0 +1,54 @@
+@startuml
+title Outbound call to G&G with Retry + Fail Record + Email Digest
+hide footbox
+actor "Business Flow\n(Controller/Job)" as FLOW
+participant "IntegrationService" as SVC
+participant "G&G API\n(External)" as GG
+database "fail_record\n(MySQL)" as FAILDB
+participant "EmailScheduler" as SCH
+participant "ExcelExporter" as XLS
+participant "MailSender" as MAIL
+
+FLOW -> SVC: callGg(payload, censq)
+
+note right of SVC
+Timeout = 15s
+Retry: maxAttempts=4
+Wait = 5 minutes between attempts
+(technical failures only)
+end note
+
+loop attempt 1..4
+  SVC -> GG: HTTP request (censq, payload)
+  alt success (000000 / 2xx)
+    GG --> SVC: success
+    break
+  else retryable failure (timeout/5xx/network)
+    GG --> SVC: error/timeout
+    SVC -> SVC: wait 5 minutes
+  else non-retryable failure (business reject)
+    GG --> SVC: business error
+    break
+  end
+end
+
+alt still failed after max retry OR non-retryable
+  SVC -> FAILDB: insert fail_record(censq,payload,error,retry_count,status=FAILED)
+  SVC --> FLOW: handled (recorded to fail list)
+else success
+  SVC --> FLOW: done
+end
+
+== Twice-daily digest ==
+SCH -> FAILDB: fetch failed records (status=FAILED, not emailed)
+FAILDB --> SCH: records
+alt records exist
+  SCH -> XLS: generateExcel(records)
+  XLS --> SCH: xlsx bytes
+  SCH -> MAIL: send email with xlsx attachment
+  SCH -> FAILDB: mark records as emailed (emailed_at, batch_id)
+else none
+  SCH --> SCH: skip (optional)
+end
+
+@enduml
