@@ -1,0 +1,34 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title Social App - Post Service Components (C4 L3)
+
+Container_Boundary(ps, "Post Service") {
+
+  Component(controller, "PostController", "REST Controller", "Endpoints: create/edit/delete/get posts")
+  Component(authz, "AuthZ & Policy Checker", "Component", "Validates user/page role, privacy rules")
+  Component(appSvc, "PostApplicationService", "Service", "Use cases: CreatePost, EditPost, DeletePost")
+  Component(domain, "Post Domain Model", "Domain", "Post aggregate + business rules")
+  Component(repo, "PostRepository", "Repository", "DB persistence for posts")
+  Component(outbox, "OutboxPublisher", "Component", "Reliable event publish (PostCreated/Updated/Deleted)")
+  Component(mediaClient, "MediaServiceClient", "HTTP Client", "Validate media IDs, fetch metadata")
+  Component(userClient, "UserServiceClient", "HTTP Client", "Privacy/blocked checks, profile lookup")
+}
+
+ContainerDb(postDb, "Post DB", "MySQL/PostgreSQL", "Posts table")
+ContainerQueue(bus, "Event Bus", "Kafka", "Domain events")
+
+Rel(controller, authz, "Calls")
+Rel(authz, appSvc, "Allows/blocks request")
+Rel(appSvc, domain, "Creates/updates")
+Rel(appSvc, repo, "Persists/loads")
+Rel(repo, postDb, "Reads/Writes")
+
+Rel(appSvc, mediaClient, "Validates media", "HTTP")
+Rel(appSvc, userClient, "Checks privacy/block", "HTTP")
+Rel(appSvc, outbox, "Emits domain events")
+Rel(outbox, bus, "Publishes", "Kafka")
+
+@enduml
+
+

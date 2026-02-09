@@ -1,0 +1,29 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+title Social App - System Context (C4 L1)
+
+Person(user, "End User", "Creates posts, comments, reacts, chats, follows pages")
+Person(admin, "Admin/Moderator", "Moderates content, handles reports, bans users")
+
+System_Boundary(social, "Social Platform") {
+  System(socialApp, "Social App", "Social network platform (mobile/web)")
+}
+
+System_Ext(idp, "Identity Provider", "SSO/OAuth2 (Okta/Keycloak)")
+System_Ext(push, "Push Notification Provider", "FCM/APNs")
+System_Ext(smsEmail, "Email/SMS Provider", "OTP, alerts")
+System_Ext(cdn, "CDN/Object Storage", "Media hosting (S3 + CDN)")
+System_Ext(analytics, "Analytics", "Events and reporting")
+
+Rel(user, socialApp, "Uses", "HTTPS")
+Rel(admin, socialApp, "Uses", "HTTPS")
+
+Rel(socialApp, idp, "Authenticates via", "OIDC/OAuth2")
+Rel(socialApp, push, "Sends push notifications", "HTTPS")
+Rel(socialApp, smsEmail, "Sends OTP/alerts", "HTTPS")
+Rel(socialApp, cdn, "Uploads/serves media", "HTTPS")
+Rel(socialApp, analytics, "Sends events", "HTTPS")
+
+@enduml
+

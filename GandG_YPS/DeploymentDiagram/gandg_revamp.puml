@@ -34,7 +34,7 @@ package "G&G FrontEnd" {
 }
 
 ' ---------- AWS HOSTED ----------
-package "AWS Cloud" {
+package "Alibaba Cloud" {
 
   package "G&G Middleware" {
     rectangle "G&G Backend"
@@ -49,6 +49,7 @@ package "Database " {
  database "Integration DB"
  database "YPS Integration DB"
   database "Sale DB"
+  database "QueueProcess DB"
 }
 
 
@@ -60,9 +61,11 @@ Staff --> "G&G FrontEnd":HTTPS
 Staff --> POS
 "G&G FrontEnd" --> "G&G Middleware" : HTTPS
 "G&G Backend" --> "Integration DB": JDBC(connection)
+"G&G Backend" --> "QueueProcess DB": (mq_status,retry_count)
 "G&G Backend" --> "YPS Integration DB": YPS data store seperate
 "G&G Backend" --> RabbitMQ : AMQP (publish)
 RabbitMQ --> "Sale Service" : AMQP (consume)
+RabbitMQ --> "QueueProcess DB" : update processing status
 
 "Sale Service" --> "Sale DB" : JDBC
 "Sale Service" --> "Microsoft AX" : Integration
