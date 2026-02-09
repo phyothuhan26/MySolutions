@@ -1,0 +1,64 @@
+@startuml
+title YPS / ABC / Sale / AX Deployment (Clean, No External Lib)
+
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultTextAlignment center
+
+' ---------- ZONE STYLE ----------
+skinparam package {
+  BorderStyle dashed
+  BorderThickness 1
+}
+
+skinparam rectangle {
+  RoundCorner 18
+  BorderThickness 1
+}
+
+' ---------- ACTORS / DEVICES ----------
+actor User
+rectangle "YPS POS Device" as POS
+
+' ---------- EXTERNAL SERVICES ----------
+package "External Services" {
+  rectangle "YPS Service"
+  rectangle "MPT"
+  rectangle "ATOM"
+}
+
+' ---------- FRONTEND ----------
+package "ABC FrontEnd" {
+  rectangle "YPS Eservice"
+  rectangle "Eservice"
+}
+
+' ---------- AWS HOSTED ----------
+package "AWS Cloud" {
+
+  package "ABC Middleware" {
+    rectangle "ABC Service"
+    queue "RabbitMQ"
+  }
+
+  rectangle "Sale Service"
+  database "DB"
+}
+
+' ---------- ERP ----------
+rectangle "Microsoft AX"
+
+' ---------- FLOWS ----------
+User --> "YPS Eservice"
+"YPS Eservice" --> "ABC Service" : HTTPS
+
+"ABC Service" --> RabbitMQ : AMQP (publish)
+RabbitMQ --> "Sale Service" : AMQP (consume)
+
+"Sale Service" --> DB : JDBC
+"Sale Service" --> "Microsoft AX" : Integration
+
+POS --> "YPS Service"
+"YPS Service" --> "ABC Service" : Callback
+
+@enduml
