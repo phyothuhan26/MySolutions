@@ -1,5 +1,5 @@
 @startuml
-title G&G Side: YPS Integration + Idempotent Upsert
+title G&G Side: YPS Integration with duplicate control
 hide footbox
 actor "YPS Service" as YPS
 participant "G&G API\n/yps/transaction" as API

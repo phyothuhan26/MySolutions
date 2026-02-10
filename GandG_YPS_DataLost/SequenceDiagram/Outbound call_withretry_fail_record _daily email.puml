@@ -1,42 +1,68 @@
 @startuml
-title YPS Side: Retry & Uploading File Server
+title Excel Import Scheduler
 hide footbox
-actor "YPS Client / Job" as YPS
-participant "G&G API" as API
-database "failure_list" as FAIL
-participant "Scheduler (EOD)" as SCH
+actor "Scheduler\n(Spring @Scheduled)" as SCH
 participant "File Server" as FS
-participant "Email Service (SMTP)" as MAIL
+participant "Excel Import Service" as IMP
+database "fail_record\n(MySQL)" as FAILDB
+database "yps_integration\n(MySQL)" as YPSDB
+participant "Mailer Service" as MAIL
 
-== Transaction call ==
-YPS -> API: Call operation (timeout=15s)
-activate API
+SCH -> IMP: triggerImportJob()
 
-alt Success
-  API --> YPS: Success response
-else Timeout / failure
-  API --> YPS: Failure / timeout
+== Access failed Excel list ==
+IMP -> FS: listFailedExcelFiles()
+FS --> IMP: fileList
 
-  loop Retry (max 4 times, delay 5 minutes)
-    YPS -> API: Retry operation
-    API --> YPS: Success or Failure
+loop for each excel file
+  == Insert PROCESS record ==
+  IMP -> FAILDB: INSERT fail_record(\naccestime=now,\nprocessstatus=PROCESS,\nretry=retry+1,\nfilename,\ntotaltransactions=?,\nremark=null\n)
+  FAILDB --> IMP: failRecordId
+
+  == Download + read ==
+  IMP -> FS: download(filename)
+  FS --> IMP: excelFileBytes
+  IMP -> IMP: parseExcel(excelFileBytes)\nrows=transactions\nshiftTime=configured\n
+  IMP -> IMP: totaltransactions = rows.count
+
+  IMP -> FAILDB: UPDATE fail_record SET\n totaltransactions=totaltransactions\n WHERE id=failRecordId
+
+  == DB Transaction: all-or-nothing ==
+  group DB TRANSACTION (rollback on any insert failure)
+    IMP -> YPSDB: BEGIN TRANSACTION
+
+    loop for each transaction row
+      note right of IMP
+        TransactionTimeS(shiftTime)
+      end note
+
+      IMP -> IMP: applyShiftTime(row.txTime)
+      IMP -> YPSDB: INSERT INTO yps_integration(\n censeq, transaction_frequency,\n last_transaction_timezx=actualTxTime,\n payload, status=NEW\n)
+      alt insert failed
+        IMP -> YPSDB: ROLLBACK
+        break
+      end
+    end
+
+    alt all inserts success
+      IMP -> YPSDB: COMMIT
+    end
   end
 
-  alt Still failed after max retries
-    YPS -> FAIL: Insert failed transaction\n(as JSON payload)
-    FAIL --> YPS: Saved
+  == Update status + notify ==
+  alt import success
+    IMP -> FAILDB: UPDATE fail_record SET\n processstatus=SUCCESS,\n remark=null\n WHERE id=failRecordId
+    FAILDB --> IMP: ok
+  else import failed (any row insert failed / parse error / IO error)
+    IMP -> FAILDB: UPDATE fail_record SET\n processstatus=FAIL,\n remark=errorDetail\n WHERE id=failRecordId
+    FAILDB --> IMP: ok
+
+    IMP -> MAIL: sendFailureEmail(\nfilename, accestime,\nretry, totaltransactions,\nremark=errorDetail\n)
+    MAIL --> IMP: sent
   end
 end
-deactivate API
 
-== End of Day ==
-SCH -> FAIL: Fetch all failed records for today
-FAIL --> SCH: Failed record list
+IMP --> SCH: jobDone()
 
-SCH -> SCH: Generate Excel file
-SCH -> FS: Upload Excel file to file server
-FS --> SCH: Upload success
-
-SCH -> MAIL: Send email with file link/path\n(or attach Excel if required)
-MAIL --> SCH: Email sent
 @enduml
+
