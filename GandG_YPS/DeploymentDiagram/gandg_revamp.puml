@@ -18,23 +18,28 @@ skinparam rectangle {
 
 ' ---------- ACTORS / DEVICES ----------
 actor Staff
-rectangle "YPS POS Device" as POS
-
+'--------POS DEVICES ---------------
+package "POS Device " {
+rectangle "YPS POS" as POS
+rectangle "Sunmi POS" as SPOS
+}
 ' ---------- EXTERNAL SERVICES ----------
 package "External Services" {
   rectangle "YPS Service"
+  package "Mobile Service"{
   rectangle "MPT"
   rectangle "ATOM"
+  }
 }
 
 ' ---------- FRONTEND ----------
 package "G&G FrontEnd" {
-  rectangle "YPS Eservice"
+
   rectangle "Eservice"
 }
 
 ' ---------- AWS HOSTED ----------
-package "AWS Cloud" {
+package "Alibaba Cloud" {
 
   package "G&G Middleware" {
     rectangle "G&G Backend"
@@ -48,7 +53,9 @@ package "AWS Cloud" {
 package "Database " {
  database "Integration DB"
  database "YPS Integration DB"
-  database "Sale DB"
+ database "Sale DB"
+ database "Sale Old DB"
+ database "QueueProcess DB"
 }
 
 
@@ -57,17 +64,21 @@ rectangle "Microsoft AX"
 
 ' ---------- FLOWS ----------
 Staff --> "G&G FrontEnd":HTTPS
-Staff --> POS
+Staff --> "POS Device "
 "G&G FrontEnd" --> "G&G Middleware" : HTTPS
+"G&G FrontEnd" --> "Mobile Service": HTTPS
 "G&G Backend" --> "Integration DB": JDBC(connection)
+"G&G Backend" --> "QueueProcess DB": (mq_status,retry_count)
 "G&G Backend" --> "YPS Integration DB": YPS data store seperate
 "G&G Backend" --> RabbitMQ : AMQP (publish)
+"Sale DB" --> "Sale Old DB": Archive data per year
 RabbitMQ --> "Sale Service" : AMQP (consume)
+RabbitMQ --> "QueueProcess DB" : update processing status
 
 "Sale Service" --> "Sale DB" : JDBC
 "Sale Service" --> "Microsoft AX" : Integration
 
-POS --> "YPS Service"
+"POS Device " --> "YPS Service"
 "YPS Service" --> "G&G Middleware" : Callback
 
 @enduml

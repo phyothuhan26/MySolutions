@@ -1,0 +1,32 @@
+@startuml
+title G&G Side: YPS Integration with duplicate control
+hide footbox
+actor "YPS Service" as YPS
+participant "G&G API\n/yps/transaction" as API
+database "yps_integration" as DB
+
+YPS -> API: Push transaction(censeq, payload)
+activate API
+
+API -> DB: SELECT * FROM yps_integration\nWHERE censeq = ?
+activate DB
+
+alt record does not exist
+  DB --> API: not found
+  deactivate DB
+  API -> DB: INSERT (censeq, transaction_frequency=1,\nlast_transaction_timezx=now, payload)
+  activate DB
+  DB --> API: inserted
+  deactivate DB
+else record exists
+  DB --> API: found
+  deactivate DB
+  API -> DB: UPDATE transaction_frequency = transaction_frequency + 1,\nlast_transaction_timezx = now,\n(increment_time/last_increment as required)
+  activate DB
+  DB --> API: updated
+  deactivate DB
+end
+
+API --> YPS: 000000 (success code)
+deactivate API
+@enduml

@@ -1,0 +1,68 @@
+@startuml
+title Excel Import Scheduler
+hide footbox
+actor "Scheduler\n(Spring @Scheduled)" as SCH
+participant "File Server" as FS
+participant "Excel Import Service" as IMP
+database "fail_record\n(MySQL)" as FAILDB
+database "yps_integration\n(MySQL)" as YPSDB
+participant "Mailer Service" as MAIL
+
+SCH -> IMP: triggerImportJob()
+
+== Access failed Excel list ==
+IMP -> FS: listFailedExcelFiles()
+FS --> IMP: fileList
+
+loop for each excel file
+  == Insert PROCESS record ==
+  IMP -> FAILDB: INSERT fail_record(\naccestime=now,\nprocessstatus=PROCESS,\nretry=retry+1,\nfilename,\ntotaltransactions=?,\nremark=null\n)
+  FAILDB --> IMP: failRecordId
+
+  == Download + read ==
+  IMP -> FS: download(filename)
+  FS --> IMP: excelFileBytes
+  IMP -> IMP: parseExcel(excelFileBytes)\nrows=transactions\nshiftTime=configured\n
+  IMP -> IMP: totaltransactions = rows.count
+
+  IMP -> FAILDB: UPDATE fail_record SET\n totaltransactions=totaltransactions\n WHERE id=failRecordId
+
+  == DB Transaction: all-or-nothing ==
+  group DB TRANSACTION (rollback on any insert failure)
+    IMP -> YPSDB: BEGIN TRANSACTION
+
+    loop for each transaction row
+      note right of IMP
+        TransactionTimeS(shiftTime)
+      end note
+
+      IMP -> IMP: applyShiftTime(row.txTime)
+      IMP -> YPSDB: INSERT INTO yps_integration(\n censeq, transaction_frequency,\n last_transaction_timezx=actualTxTime,\n payload, status=NEW\n)
+      alt insert failed
+        IMP -> YPSDB: ROLLBACK
+        break
+      end
+    end
+
+    alt all inserts success
+      IMP -> YPSDB: COMMIT
+    end
+  end
+
+  == Update status + notify ==
+  alt import success
+    IMP -> FAILDB: UPDATE fail_record SET\n processstatus=SUCCESS,\n remark=null\n WHERE id=failRecordId
+    FAILDB --> IMP: ok
+  else import failed (any row insert failed / parse error / IO error)
+    IMP -> FAILDB: UPDATE fail_record SET\n processstatus=FAIL,\n remark=errorDetail\n WHERE id=failRecordId
+    FAILDB --> IMP: ok
+
+    IMP -> MAIL: sendFailureEmail(\nfilename, accestime,\nretry, totaltransactions,\nremark=errorDetail\n)
+    MAIL --> IMP: sent
+  end
+end
+
+IMP --> SCH: jobDone()
+
+@enduml
+

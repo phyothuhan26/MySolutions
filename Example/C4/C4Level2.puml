@@ -1,0 +1,105 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Social App - Containers / Microservices (C4 L2)
+
+Person(user, "End User", "Uses the app")
+Person(admin, "Admin/Moderator", "Moderation and admin tasks")
+
+System_Boundary(s1, "Social Platform") {
+
+  Container(mobile, "Mobile App", "Flutter / iOS / Android", "User app for social features")
+  Container(web, "Web App", "React", "Web client for users/admin")
+  Container(adminUi, "Admin Console", "React", "Moderation and admin portal")
+
+  Container(gateway, "API Gateway / BFF", "Spring Cloud Gateway / Node BFF", "Routing, auth verification, aggregation, rate limit")
+
+  Container(auth, "Auth Service", "Spring Boot", "Token issuing/refresh, device sessions")
+  Container(userSvc, "User/Profile Service", "Spring Boot", "Profiles, follow graph, privacy")
+  Container(pageSvc, "Page Service", "Spring Boot", "Pages, roles, page posts")
+  Container(postSvc, "Post Service", "Spring Boot", "Create/edit/delete posts")
+  Container(commentSvc, "Comment Service", "Spring Boot", "Comments and threads")
+  Container(reactionSvc, "Reaction Service", "Spring Boot", "Reactions + counts")
+  Container(feedSvc, "Feed Service", "Spring Boot", "Timeline generation, ranking, caching")
+  Container(mediaSvc, "Media Service", "Spring Boot", "Upload, media metadata, processing triggers")
+  Container(chatSvc, "Chat Service", "Spring Boot/WebSocket", "1:1 chat and group chat")
+  Container(liveSvc, "Live Service", "Spring Boot", "Live sessions (Agora), audience, live chat bridge")
+  Container(notifSvc, "Notification Service", "Spring Boot", "Push + in-app notifications")
+  Container(searchSvc, "Search Service", "Spring Boot", "Search users/pages/posts")
+  Container(modSvc, "Moderation Service", "Spring Boot", "Reports, bans, takedowns")
+
+  ContainerQueue(bus, "Event Bus", "Kafka", "Domain events (PostCreated, ReactionAdded, CommentAdded...)")
+
+  ContainerDb(userDb, "User DB", "MySQL/PostgreSQL", "User/profile/page data")
+  ContainerDb(postDb, "Post DB", "MySQL/PostgreSQL", "Posts")
+  ContainerDb(commentDb, "Comment DB", "MySQL/PostgreSQL", "Comments")
+  ContainerDb(reactionDb, "Reaction DB", "MySQL/PostgreSQL", "Reactions")
+  ContainerDb(chatDb, "Chat DB", "MySQL/PostgreSQL", "Messages")
+  ContainerDb(modDb, "Moderation DB", "MySQL/PostgreSQL", "Reports, bans")
+  ContainerDb(cache, "Cache", "Redis", "Feed cache, counters, rate limiting")
+  ContainerDb(searchIndex, "Search Index", "OpenSearch/Elasticsearch", "Indexed documents")
+  ContainerDb(obj, "Object Storage", "S3/MinIO", "Images/videos")
+}
+
+System_Ext(idp, "Identity Provider", "OIDC/OAuth2")
+System_Ext(push, "Push Provider", "FCM/APNs")
+System_Ext(cdn, "CDN", "Media delivery")
+System_Ext(agora, "Live Provider", "Agora/Streaming platform")
+
+Rel(user, mobile, "Uses")
+Rel(user, web, "Uses")
+Rel(admin, adminUi, "Uses")
+
+Rel(mobile, gateway, "Calls", "HTTPS/JSON")
+Rel(web, gateway, "Calls", "HTTPS/JSON")
+Rel(adminUi, gateway, "Calls", "HTTPS/JSON")
+
+Rel(gateway, idp, "Validates tokens with", "OIDC/JWKS")
+Rel(gateway, auth, "Routes auth APIs to", "HTTPS")
+Rel(gateway, userSvc, "Routes user APIs to", "HTTPS")
+Rel(gateway, pageSvc, "Routes page APIs to", "HTTPS")
+Rel(gateway, postSvc, "Routes post APIs to", "HTTPS")
+Rel(gateway, commentSvc, "Routes comment APIs to", "HTTPS")
+Rel(gateway, reactionSvc, "Routes reaction APIs to", "HTTPS")
+Rel(gateway, feedSvc, "Routes feed APIs to", "HTTPS")
+Rel(gateway, mediaSvc, "Routes media APIs to", "HTTPS")
+Rel(gateway, chatSvc, "Routes chat APIs to", "HTTPS/WebSocket")
+Rel(gateway, liveSvc, "Routes live APIs to", "HTTPS")
+Rel(gateway, notifSvc, "Routes notification APIs to", "HTTPS")
+Rel(gateway, searchSvc, "Routes search APIs to", "HTTPS")
+Rel(gateway, modSvc, "Routes moderation APIs to", "HTTPS")
+
+Rel(auth, userDb, "Reads/Writes")
+Rel(userSvc, userDb, "Reads/Writes")
+Rel(pageSvc, userDb, "Reads/Writes (pages/roles)")
+Rel(postSvc, postDb, "Reads/Writes")
+Rel(commentSvc, commentDb, "Reads/Writes")
+Rel(reactionSvc, reactionDb, "Reads/Writes")
+Rel(chatSvc, chatDb, "Reads/Writes")
+Rel(modSvc, modDb, "Reads/Writes")
+
+Rel(feedSvc, cache, "Uses", "Redis")
+Rel(reactionSvc, cache, "Updates counters", "Redis")
+Rel(notifSvc, push, "Sends push", "HTTPS")
+
+Rel(mediaSvc, obj, "Stores media", "HTTPS")
+Rel(obj, cdn, "Served via", "CDN")
+
+Rel(liveSvc, agora, "Manages live sessions", "SDK/API")
+
+' Events
+Rel(postSvc, bus, "Publishes events", "Kafka")
+Rel(commentSvc, bus, "Publishes events", "Kafka")
+Rel(reactionSvc, bus, "Publishes events", "Kafka")
+
+Rel(feedSvc, bus, "Consumes events", "Kafka")
+Rel(searchSvc, bus, "Consumes events", "Kafka")
+Rel(notifSvc, bus, "Consumes events", "Kafka")
+Rel(modSvc, bus, "Consumes events", "Kafka")
+
+Rel(searchSvc, searchIndex, "Updates/Queries", "HTTP")
+Rel(feedSvc, postDb, "Reads posts for building feed", "SQL")
+Rel(feedSvc, userDb, "Reads follow graph/privacy", "SQL")
+
+@enduml
+
