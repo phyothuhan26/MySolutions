@@ -1,0 +1,102 @@
+@startuml
+title G&G Revamp
+
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultTextAlignment center
+
+' Force left-to-right layout for the main row
+left to right direction
+
+' ---------- ZONE STYLE ----------
+skinparam package {
+  BorderStyle dashed
+  BorderThickness 1
+}
+
+skinparam rectangle {
+  RoundCorner 18
+  BorderThickness 1
+}
+
+' ---------- ACTORS / DEVICES ----------
+actor Staff
+
+'--------POS DEVICES ---------------
+package "POS Device" as pos_zone {
+  rectangle "YPS POS" as POS
+  rectangle "Sunmi POS" as SPOS
+}
+
+' ---------- EXTERNAL SERVICES ----------
+package "External Services" as ext_zone {
+  rectangle "YPS Service" as yps_service
+  package "Mobile Service" as mob_zone {
+    rectangle "MPT" as mpt
+    rectangle "ATOM" as atom
+  }
+}
+
+' ---------- FRONTEND ----------
+package "G&G FrontEnd" as fe_zone {
+  rectangle "Eservice" as eservice_ui
+}
+
+' ---------- CLOUD HOSTED ----------
+package "Alibaba Cloud" as cloud_zone {
+
+  ' Put these side-by-side (top row)
+  together {
+    rectangle "Sale Scheduler" as data_scheduler
+    rectangle "YPS Entry" as y_entry
+
+    package "G&G Middleware" as gg_mw {
+      rectangle "G&G Backend(Eservice)" as gg_backend
+    }
+  }
+
+  ' RabbitMQ at bottom
+  queue "RabbitMQ" as mq
+
+  ' Hidden links to force mq BELOW the top row
+  data_scheduler -[hidden]down-> mq
+  y_entry        -[hidden]down-> mq
+  gg_backend     -[hidden]down-> mq
+}
+
+' ---------- DB ----------
+package "Database" as db_zone {
+  database "Integration DB" as integration_db
+  database "YPS Integration DB" as yps_integration_db
+  database "Sale DB" as sale_db
+  database "Sale Old DB" as sale_old_db
+  database "QueueProcess DB" as queueprocess_db
+}
+
+' ---------- ERP ----------
+rectangle "Microsoft AX" as ax
+
+' ---------- FLOWS ----------
+Staff --> fe_zone : HTTPS
+Staff --> pos_zone
+
+fe_zone --> gg_mw : HTTPS
+fe_zone --> mob_zone : HTTPS
+
+gg_backend --> integration_db : JDBC(connection)
+gg_backend --> queueprocess_db : (mq_status, retry_count)
+gg_backend --> yps_integration_db : YPS data store separate
+gg_backend --> mq : AMQP (publish)
+
+sale_db --> sale_old_db : Archive data per year
+mq --> queueprocess_db : update processing status
+
+data_scheduler --> sale_db : consume
+mq --> gg_backend : consume
+
+pos_zone --> yps_service
+yps_service --> y_entry : Callback
+y_entry --> mq : AMQP (publish)
+
+data_scheduler --> ax : send per 15 min
+@enduml

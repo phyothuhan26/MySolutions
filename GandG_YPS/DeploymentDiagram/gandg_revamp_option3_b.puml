@@ -1,0 +1,89 @@
+@startuml
+title G&G Revamp
+
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultTextAlignment center
+
+' ---------- ZONE STYLE ----------
+skinparam package {
+  BorderStyle dashed
+  BorderThickness 1
+}
+
+skinparam rectangle {
+  RoundCorner 18
+  BorderThickness 1
+}
+
+' ---------- ACTORS / DEVICES ----------
+actor Staff
+'--------POS DEVICES ---------------
+package "POS Device " {
+rectangle "YPS POS" as POS
+rectangle "Sunmi POS" as SPOS
+}
+' ---------- EXTERNAL SERVICES ----------
+package "External Services" {
+  rectangle "YPS Service"
+  package "Mobile Service"{
+  rectangle "MPT"
+  rectangle "ATOM"
+  }
+}
+
+' ---------- FRONTEND ----------
+package "G&G FrontEnd" {
+
+  rectangle "Eservice"
+}
+
+' ---------- AWS HOSTED ----------
+package "Alibaba Cloud" {
+  rectangle "YPS Entry" as y_entry
+  package "G&G Middleware" {
+    rectangle "G&G Backend(Eservice)"
+  }
+    queue "RabbitMQ"
+
+  rectangle "Sale Service"
+  rectangle "Sale Scheduler" as data_scheduler
+
+}
+' ---------- DB  ----------
+package "Database " {
+ database "Integration DB"
+ database "YPS Integration DB"
+ database "Sale DB"
+ database "Sale Old DB"
+ database "QueueProcess DB"
+}
+
+
+' ---------- ERP ----------
+rectangle "Microsoft AX"
+
+' ---------- FLOWS ----------
+Staff --> "G&G FrontEnd":HTTPS
+Staff --> "POS Device "
+"G&G FrontEnd" --> "G&G Middleware" : HTTPS
+"G&G FrontEnd" --> "Mobile Service": HTTPS
+"G&G Backend(Eservice)" --> "Integration DB": JDBC(connection)
+"G&G Backend(Eservice)" --> "QueueProcess DB": (mq_status,retry_count)
+"G&G Backend(Eservice)" --> "YPS Integration DB": YPS data store seperate
+"G&G Backend(Eservice)" --> RabbitMQ : AMQP (publish)
+"Sale DB" --> "Sale Old DB": Archive data per year
+RabbitMQ --> "Sale Service" : AMQP (consume)
+RabbitMQ --> "QueueProcess DB" : update processing status
+
+"Sale Service" -->RabbitMQ:(publish)
+RabbitMQ--> "data_scheduler" : consume
+"Sale Service" --> "Microsoft AX" : Integration
+
+"POS Device " --> "YPS Service"
+"YPS Service" --> "y_entry" : Callback
+"y_entry" --> "RabbitMQ": AMQP((publish)
+"data_scheduler"-->"Sale DB"
+"data_scheduler"-->"Microsoft AX":"send per 15 min"
+
+@enduml

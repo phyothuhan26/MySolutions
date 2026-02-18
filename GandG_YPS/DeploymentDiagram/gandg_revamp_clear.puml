@@ -1,0 +1,106 @@
+@startuml
+title G&G Revamp (Structured)
+
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultTextAlignment center
+left to right direction
+
+' --- Styles ---
+skinparam package {
+  BorderStyle dashed
+  BorderThickness 1
+}
+skinparam rectangle {
+  RoundCorner 18
+  BorderThickness 1
+}
+
+' ======================
+' LAYER 1: CHANNELS
+' ======================
+package "Channels" as channels {
+  actor Staff as staff
+
+  package "POS Device" as pos_zone {
+    rectangle "YPS POS" as pos_yps
+    rectangle "Sunmi POS" as pos_sunmi
+  }
+}
+
+' ======================
+' LAYER 2: APPLICATIONS (CLOUD)
+' ======================
+package "Alibaba Cloud" as cloud {
+
+  package "G&G FrontEnd" as fe {
+    rectangle "Eservice UI" as ui
+  }
+
+  rectangle "YPS Entry" as y_entry
+
+  package "G&G Middleware" as mw {
+    rectangle "G&G Backend" as backend
+  }
+
+  rectangle "Sale Scheduler" as scheduler
+
+  queue "RabbitMQ" as mq
+
+  ' Force MQ to be under app components
+  ui        -[hidden]down-> mq
+  y_entry   -[hidden]down-> mq
+  backend   -[hidden]down-> mq
+  scheduler -[hidden]down-> mq
+}
+
+' ======================
+' LAYER 3: EXTERNAL + DATA
+' ======================
+package "External Services" as ext {
+  rectangle "YPS Service" as yps_service
+
+  package "Mobile Service" as mobile {
+    rectangle "MPT" as mpt
+    rectangle "ATOM" as atom
+  }
+
+  rectangle "Microsoft AX" as ax
+}
+
+package "Database" as db {
+  database "Integration DB" as integration_db
+  database "YPS Integration DB" as yps_integration_db
+  database "QueueProcess DB" as queueprocess_db
+  database "Sale DB" as sale_db
+  database "Sale Old DB" as sale_old_db
+}
+
+' ======================
+' FLOWS (keep minimal in deployment diagram)
+' ======================
+staff --> ui : HTTPS
+staff --> pos_zone
+
+pos_zone --> yps_service
+yps_service --> y_entry : Callback
+
+ui --> backend : HTTPS
+ui --> mobile : HTTPS
+
+y_entry --> mq : publish
+backend --> mq : publish
+mq --> backend : consume
+
+scheduler --> sale_db : consume
+scheduler --> ax : send per 15 min
+
+backend --> integration_db : JDBC
+backend --> yps_integration_db : store YPS data
+backend --> queueprocess_db : (mq_status, retry_count)
+mq --> queueprocess_db : update status
+
+sale_db --> sale_old_db : archive per year
+
+@enduml
+
