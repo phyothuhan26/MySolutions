@@ -18,7 +18,7 @@ skinparam rectangle {
 
 ' ---------- ACTORS / DEVICES ----------
 actor Staff
-'--------POS DEVICES ---------------
+'--------POS DEVICEddS ---------------
 package "POS Device " {
 rectangle "YPS POS" as POS
 rectangle "Sunmi POS" as SPOS
