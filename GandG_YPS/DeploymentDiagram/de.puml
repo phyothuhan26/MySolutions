@@ -1,0 +1,96 @@
+@startuml
+title G&G - Infrastructure Deployment (VM per Service + Load Balancer + Auto Scaling)
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+'========================
+' Alibaba Cloud (Infra)
+'========================
+cloud "Alibaba Cloud" as ALI {
+
+  node "VPC" as VPC {
+    node "Public Subnet" as PUB {
+      node "Internet / Clients" as NET
+      node "Load Balancer (SLB)" as SLB
+    }
+
+    node "Private Subnet" as PRIV {
+
+      '------------------------
+      ' Auto Scaling VM Groups
+      '------------------------
+      frame "Auto Scaling Group: G&G Middleware VMs" as ASG_MW {
+        node "VM: YPS Entry Service" as VM_YPS {
+          artifact "yps-entry-service.jar"
+        }
+        node "VM: Sale Service" as VM_SALE {
+          artifact "sale-service.jar"
+        }
+      }
+
+      frame "Auto Scaling Group: G&G Backend VMs" as ASG_BE {
+        node "VM: G&G Backend Service" as VM_BE {
+          artifact "gg-backend-eservice.jar"
+        }
+        node "VM: G&G Scheduler" as VM_SCH {
+          artifact "gg-scheduler.jar"
+        }
+      }
+
+      '------------------------
+      ' Messaging + Databases
+      '------------------------
+      node "RabbitMQ Cluster" as RMQ {
+        queue "Exchange/Queue" as Q1
+      }
+
+      database "G&G DB (Primary)" as DBP
+      database "Archive DB" as DBA
+    }
+  }
+}
+
+'========================
+' External Systems
+'========================
+cloud "External Services" as EXT {
+  node "YPS Service" as YPS
+  node "CCN Service" as CCN
+
+  node "ERP Systems" as ERP {
+    node "Microsoft AX" as AX
+    node "Dynamics 365" as D365
+    node "DX" as DX
+  }
+
+  node "Mobile & Other eServices" as MOB {
+    node "MPT" as MPT
+    node "ATOM" as ATOM
+    node "U9" as U9
+  }
+}
+
+'========================
+' Traffic + Flows
+'========================
+NET --> SLB : HTTPS
+SLB --> VM_YPS : HTTPS (API)
+SLB --> VM_SALE : HTTPS (API)
+SLB --> VM_BE : HTTPS (API)
+
+VM_SCH --> YPS : HTTPS (poll or sync)
+VM_YPS --> DBP : JDBC (write yps_integration)
+VM_SALE --> DBP : JDBC (write sale/integration tables)
+VM_BE --> DBP : JDBC (read/write)
+
+VM_SALE --> RMQ : AMQP publish
+RMQ --> VM_BE : AMQP consume (ERP push)
+VM_BE --> AX : HTTPS/SOAP
+VM_BE --> D365 : HTTPS
+VM_BE --> DX : HTTPS
+
+DBP --> DBA : archive job/ETL (scheduled)
+
+@enduml
+
+

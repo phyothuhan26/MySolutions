@@ -25,6 +25,8 @@ rectangle "Sunmi POS" as SPOS
 }
 ' ---------- EXTERNAL SERVICES ----------
 package "External Services" {
+
+  rectangle "CCN EService"
   rectangle "YPS Service"
   package "Mobile Service"{
   rectangle "MPT"
@@ -40,23 +42,28 @@ package "G&G FrontEnd" {
 
 ' ---------- AWS HOSTED ----------
 package "Alibaba Cloud" {
-  rectangle "YPS Entry" as y_entry
+
   package "G&G Middleware" {
+    rectangle "YPS Entry" as y_entry
     rectangle "G&G Backend(Eservice)"
+    rectangle "Sale Service"
+    rectangle "Sale Scheduler" as data_scheduler
   }
     queue "RabbitMQ"
 
-  rectangle "Sale Service"
-  rectangle "Sale Scheduler" as data_scheduler
+
 
 }
 ' ---------- DB  ----------
-package "Database " {
+package "Single Database Instance" {
+package "G&G Database" {
  database "Integration DB"
  database "YPS Integration DB"
  database "Sale DB"
- database "Sale Old DB"
+
  database "QueueProcess DB"
+ }
+  database "Sale Old DB"
 }
 
 
