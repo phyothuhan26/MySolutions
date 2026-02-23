@@ -1,0 +1,41 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+title G&G System - C4 Container Diagram (Level 2)
+
+Person(pos, "POS User", "Uses POS device")
+System_Ext(posDevice, "POS Device (Sunmi/YPS POS)", "POS Terminal")
+
+System_Ext(yps, "YPS Service", "External")
+System_Ext(ccn, "CCN Service", "External")
+System_Ext(erp, "ERP (AX/365/DX)", "External")
+
+System_Boundary(gg, "G&G System") {
+
+  Container(ypsEntry, "YPS Entry Service", "Spring Boot", "Ingests/validates YPS transactions")
+  Container(saleSvc, "Sale Service", "Spring Boot", "Processes sales and prepares ERP payload")
+  Container(ggBackend, "G&G Backend Service", "Spring Boot", "Back-office APIs, monitoring, admin operations")
+  Container(scheduler, "Sale Scheduler", "Spring Boot / Quartz", "Polling, retries, scheduled jobs")
+
+  ContainerQueue(rmq, "RabbitMQ", "AMQP", "Async buffer for reliable processing & fan-out")
+
+  ContainerDb(db, "G&G Database", "RDBMS", "Single DB instance with 2 schemas: g&g + archive")
+}
+
+Rel(pos, posDevice, "Operates", "")
+Rel(posDevice, yps, "Calls", "HTTPS")
+Rel(yps, ypsEntry, "Sends/Pulls transactions", "HTTPS")
+
+Rel(scheduler, yps, "Polls (if applicable)", "HTTPS")
+
+Rel(ypsEntry, db, "Write/Read", "JDBC")
+Rel(saleSvc, db, "Write/Read", "JDBC")
+Rel(ggBackend, db, "Write/Read", "JDBC")
+Rel(scheduler, db, "Write/Read", "JDBC")
+
+Rel(saleSvc, rmq, "Publishes events", "AMQP")
+Rel(rmq, ggBackend, "Consumes for ERP sync", "AMQP")
+Rel(ggBackend, erp, "Push sales data", "HTTPS/SOAP")
+
+@enduml
+
+

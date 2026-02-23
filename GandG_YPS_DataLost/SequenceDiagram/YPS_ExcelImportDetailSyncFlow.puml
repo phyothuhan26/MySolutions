@@ -1,0 +1,91 @@
+@startuml
+title G&G Side: Excel Import (Scheduler)
+hide footbox
+
+participant "G&GScheduler" as SCH
+participant "YPS File Server" as FS
+participant "G&G Import Service" as IMP
+database "Sale Header" as SHeader
+database "yps_integration" as YPSDB
+database "fail_record" as FDB
+note right of FDB
+  record fail transaction info
+  accesstime,processstatus,session_status , total_session ,retrycount,filename,totaltransaction,remark
+end note
+database "fail_session" as FDBD
+note right of FDBD
+  record session info to check shift open status
+  session_id,storeid,sync_status(process/finish)
+end note
+participant "Shift" as shift
+participant "SaleErp" as SErp
+
+
+SCH -> FS: Access file server to retrieve failed Excel list
+FS --> SCH: Excel file (filename, rows)
+
+SCH -> IMP: Start import(filename, excelRows)
+
+activate IMP
+
+' (e) Every access must insert a record into fail_record
+IMP -> FDB: INSERT fail_record()
+FDB --> IMP: OK
+
+IMP -> YPSDB: BEGIN TRANSACTION
+activate YPSDB
+
+loop For each row in Excel
+
+
+  IMP -> YPSDB: INSERT
+  alt Insert failed for a row
+    YPSDB --> IMP: Error (insert failed)
+
+    IMP -> YPSDB: ROLLBACK
+    YPSDB --> IMP: Rolled back
+    deactivate YPSDB
+
+    IMP -> FDB: UPDATE fail_record\nSET processstatus="FAIL"
+    FDB --> IMP: OK
+
+    IMP --> SCH: Import failed (rollback done)
+    deactivate IMP
+    return
+  else Insert success
+    YPSDB --> IMP: OK
+  end
+end
+
+IMP -> YPSDB: COMMIT
+YPSDB --> IMP: Committed
+IMP --> SHeader:Create Sale Header
+SHeader --> FDBD: store session records
+FDBD--> IMP:OK
+IMP--> SCH: Import Success
+note left of SCH
+Monitoring ERP Sync and Shift close session
+end note
+SCH -->SErp: sync to erp in 15 min
+SErp --> SCH :Sync success
+
+SErp->SErp: Check & sync
+SCH --> FDB :check session  in next 6 hr and before next sync
+note right of SCH
+use seperate cron job for fail transaction status checking
+need to check two time before import time and 6 hr after import time
+end note
+FDB --> FDB:checking unfinish transaction with session_status(unfinish)
+FDB --> FDBD:FetchSession(syc_status=unfinish)
+FDBD-->shift :close Shift by checking sync status finish
+shift-->SCH :finish
+SCH --> FDBD:updateFailRecord(staus=shiftClose)
+FDBD --> FDB:updateFailSessionRecord(sesstion_status=finish,processstatus=SUCCESS)
+FDB --> SCH: OK
+
+deactivate IMP
+@enduml
+
+
+
+

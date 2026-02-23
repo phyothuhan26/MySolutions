@@ -1,0 +1,54 @@
+@startuml
+title G&G Revamp - Data Flow Diagram (Option 3)
+
+skinparam shadowing false
+skinparam roundcorner 12
+
+' External Entities
+rectangle "Staff" as staff
+rectangle "POS Devices\n(Sunmi POS / YPS POS)" as pos
+rectangle "YPS Service" as yps
+rectangle "CCN Eservice" as ccn
+rectangle "ERP\n(Microsoft AX / 365)" as erp
+
+' Processes
+rectangle "P1: YPS Entry Service\n(Receive/Validate/Store)" as p1
+rectangle "P2: G&G Backend Eservice\n(Business Process/Publish)" as p2
+rectangle "P3: RabbitMQ\n(Message Broker)" as p3
+rectangle "P4: Sale Service\n(Consume/Write Sale/Update Status)" as p4
+rectangle "P5: G&G Scheduler\n(Batch Sync every 15 min)" as p5
+rectangle "P6: Archive Job\n(Yearly archive)" as p6
+
+' Data Stores
+database "D1: Integration Table" as d1
+database "D2: YPS Integration Table" as d2
+database "D3: Queue Process Table\n(mq_status, retry_count)" as d3
+database "D4: Sale Table" as d4
+database "D5: Sale Archive Table" as d5
+
+' Flows
+staff --> pos : Use POS
+staff --> p2 : Use Frontend/Monitor\n(HTTPS)
+
+pos --> yps : Send transaction\n(HTTPS)
+yps --> p1 : Callback data\n(HTTPS)
+ccn --> p1 : Send data\n(HTTPS)
+
+p1 --> d2 : Store raw payload\n+ metadata
+p1 --> p3 : Publish message\n(AMQP)
+
+p2 --> d1 : Store integration record\n(optional)
+p2 --> p3 : Publish message\n(AMQP)
+
+p3 --> p4 : Consume message\n(AMQP)
+p4 --> d4 : Insert/Update Sale
+p4 --> d3 : Update processing status\n(mq_status, retry_count)
+p4 --> d2 : Update YPS integration status\n(optional)
+
+p5 --> d4 : Fetch ready sales\nfor sync
+p5 --> erp : Send sales batch\n(every 15 min)
+
+p6 --> d4 : Read old sales
+p6 --> d5 : Write archived sales\n(yearly)
+
+@enduml

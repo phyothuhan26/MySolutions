@@ -1,0 +1,59 @@
+@startuml
+' C4 library (beautiful theme)
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4.puml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title G&G Revamp - C4 Container Diagram (Level 2)
+
+Person(staff, "Staff", "Uses POS and G&G Frontend")
+
+System_Ext(posDevice, "POS Device", "Sunmi POS / YPS POS")
+System_Ext(yps, "YPS Service", "External")
+System_Ext(ccn, "CCN Eservice", "External")
+System_Ext(mobile, "Mobile & Other Eservice", "MPT / ATOM / U9")
+System_Ext(erp, "ERP", "Microsoft AX / 365")
+
+System_Boundary(gg, "G&G System (Alibaba Cloud)") {
+
+  Container(frontend, "G&G Frontend", "Web/App", "Monitoring, admin, support operations")
+
+  Container(ypsEntry, "YPS Entry Service", "Spring Boot", "Receives callbacks, validates, stores raw integration events")
+  Container(ggBackend, "G&G Backend Eservice", "Spring Boot", "Business processing, publishes events to MQ")
+  Container(saleSvc, "Sale Service", "Spring Boot", "Consumes events, writes Sale data, updates processing status")
+  Container(scheduler, "G&G Scheduler", "Spring Boot / Quartz", "Batch ERP sync every ~15 minutes")
+
+  ContainerQueue(rmq, "RabbitMQ", "AMQP", "Async buffer for reliable processing")
+
+  ContainerDb(gngDb, "G&G DB (Single Instance)", "RDBMS",
+  "Integration Table\nYPS Integration Table\nQueue Process Table (mq_status,retry_count)\nSale Table")
+
+  ContainerDb(archiveDb, "Archive DB", "RDBMS", "Sale Archive Table (yearly archive)")
+}
+
+Rel(staff, frontend, "Uses", "HTTPS")
+Rel(staff, posDevice, "Operates", "")
+
+Rel(posDevice, yps, "Send transactions", "HTTPS")
+Rel(yps, ypsEntry, "Callback / Send data", "HTTPS")
+Rel(ccn, ypsEntry, "Send data", "HTTPS")
+Rel(mobile, ypsEntry, "Related calls", "HTTPS")
+
+Rel(ypsEntry, gngDb, "Write raw payload + metadata", "JDBC")
+Rel(ggBackend, gngDb, "Read/Write integration records", "JDBC")
+
+Rel(ypsEntry, rmq, "Publish event", "AMQP")
+Rel(ggBackend, rmq, "Publish event", "AMQP")
+Rel(rmq, saleSvc, "Consume event", "AMQP")
+
+Rel(saleSvc, gngDb, "Write Sale + update status", "JDBC")
+Rel(scheduler, gngDb, "Fetch ready sales", "JDBC")
+Rel(scheduler, erp, "Push sales batch (~15 min)", "HTTPS/SOAP")
+
+Rel(gngDb, archiveDb, "Archive yearly", "ETL/Job")
+
+@enduml
+
+
+
+
+
