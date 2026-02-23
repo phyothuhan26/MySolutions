@@ -4,6 +4,7 @@ title G&G System - C4 Context Diagram (Level 1)
 
 ' People / Actors
 Person(posUser, "POS Staff", "Creates sales transactions on POS devices")
+System(ggfe, "G&G frontend", "Validates, processes, stores, and forwards sales transactions to ERP with reliability controls")
 
 ' External systems
 System_Ext(posDevice, "POS Device (Sunmi / YPS POS)", "POS terminal used at stores")
@@ -22,4 +23,7 @@ Rel(gg, ccn, "Calls when needed (business integration)", "HTTPS")
 Rel(gg, erp, "Transfers processed sales data", "HTTPS/SOAP or API")
 
 @enduml
+
+
+
 

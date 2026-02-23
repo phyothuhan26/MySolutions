@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+title G&G Revamp - C4 Context (L1)
+
+Person(staff, "Staff", "Uses POS and G&G Frontend")
+
+System_Ext(posDevices, "POS Devices", "Sunmi POS / YPS POS")
+System_Ext(ypsService, "YPS Service", "External YPS backend")
+System_Ext(ccnEservice, "CCN Eservice", "External service")
+System_Ext(erp, "ERP (Microsoft AX / 365)", "ERP system")
+
+System_Boundary(gng, "G&G System (Alibaba Cloud)") {
+  System(gngSystem, "G&G Revamp", "Receives YPS data, processes sales, syncs to ERP, keeps audit/trace")
+}
+
+Rel(staff, posDevices, "Operate / submit sales", "HTTPS")
+Rel(staff, gngSystem, "Use G&G Frontend", "HTTPS")
+
+Rel(posDevices, ypsService, "Send transaction data", "HTTPS")
+Rel(ypsService, gngSystem, "Callback / send data", "HTTPS")
+Rel(ccnEservice, gngSystem, "Send data / integration", "HTTPS")
+
+Rel(gngSystem, erp, "Sync sales (every ~15 min)", "HTTPS/Integration")
+
+@enduml
+
+

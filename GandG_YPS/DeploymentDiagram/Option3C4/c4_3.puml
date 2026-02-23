@@ -1,0 +1,54 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4.puml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title G&G Revamp - Sale Service - C4 Component Diagram (Level 3)
+
+Container_Boundary(saleSvc, "Sale Service (Spring Boot)") {
+
+  Component(mqConsumer, "AMQP Consumer", "Spring AMQP Listener",
+    "Consumes SaleCreated/SaleUpdated events from RabbitMQ")
+
+  Component(idempotency, "Idempotency Guard", "Service",
+    "Deduplicate by censeq/transactionId to avoid double processing")
+
+  Component(saleProcessor, "Sale Processor", "Domain Service",
+    "Transforms event into Sale domain model and validates business rules")
+
+  Component(saleRepo, "Sale Repository", "JPA/JDBC Repository",
+    "Insert/Update Sale table")
+
+  Component(queueProcessRepo, "QueueProcess Repository", "JPA/JDBC Repository",
+    "Update mq_status, retry_count, last_error in Queue Process table")
+
+  Component(ypsIntegrationRepo, "YPS Integration Repository", "JPA/JDBC Repository",
+    "Update processing status in YPS Integration table")
+
+  Component(erpPayloadBuilder, "ERP Payload Builder", "Service",
+    "Build AX/365 payload structure for scheduler sync")
+
+  Component(metricsLogging, "Metrics & Audit Logger", "Component",
+    "Logs success/failure payload + timings for traceability")
+}
+
+System_Ext(rmq, "RabbitMQ", "AMQP")
+ContainerDb(gngDb, "G&G DB", "RDBMS", "Sale table + QueueProcess + YPS Integration")
+Container_Ext(scheduler, "G&G Scheduler", "Spring Boot/Quartz", "Reads ready sales for ERP sync")
+
+Rel(rmq, mqConsumer, "Delivers messages", "AMQP")
+Rel(mqConsumer, idempotency, "Checks duplicates", "")
+Rel(idempotency, saleProcessor, "Passes unique messages", "")
+Rel(saleProcessor, saleRepo, "Write sale", "JDBC")
+Rel(saleProcessor, erpPayloadBuilder, "Build ERP payload", "")
+Rel(saleProcessor, queueProcessRepo, "Update processing status", "JDBC")
+Rel(saleProcessor, ypsIntegrationRepo, "Update YPS status", "JDBC")
+Rel(metricsLogging, gngDb, "Write logs/audit (optional)", "JDBC")
+
+Rel(saleRepo, gngDb, "Read/Write", "JDBC")
+Rel(queueProcessRepo, gngDb, "Read/Write", "JDBC")
+Rel(ypsIntegrationRepo, gngDb, "Read/Write", "JDBC")
+
+Rel(scheduler, gngDb, "Fetch ready sales", "JDBC")
+
+@enduml
+

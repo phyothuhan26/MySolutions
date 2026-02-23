@@ -1,0 +1,52 @@
+@startuml
+title G&G Revamp - Container Diagram (Level 2) (No C4 macros)
+
+skinparam shadowing false
+skinparam roundcorner 12
+skinparam packageStyle rectangle
+
+actor "Staff" as Staff
+
+rectangle "POS Devices\n- Sunmi POS\n- YPS POS" as POS
+rectangle "YPS Service\n(External)" as YPS
+rectangle "CCN Eservice\n(External)" as CCN
+rectangle "Mobile & Other Eservice\n(MPT / ATOM / U9)" as MOB
+rectangle "ERP\nMicrosoft AX / 365" as ERP
+
+package "Alibaba Cloud - G&G" as CLOUD {
+
+  rectangle "G&G Frontend\n(Web/App)" as FE
+  rectangle "YPS Entry Service" as YPSE
+  rectangle "G&G Backend Eservice" as BACK
+  rectangle "Sale Service" as SALE
+  rectangle "G&G Scheduler\n(sync every ~15 min)" as SCH
+
+  queue "RabbitMQ" as MQ
+
+  database "G&G DB (Single Instance)\n- Integration Table\n- YPS Integration Table\n- Queue Process Table\n- Sale Table" as DB
+
+  database "Archive DB\n- Sale Archive Table" as ADB
+}
+
+Staff --> FE : HTTPS
+Staff --> POS : use
+
+POS --> YPS : HTTPS (send transaction)
+YPS --> YPSE : HTTPS (callback data)
+CCN --> YPSE : HTTPS
+MOB --> YPSE : HTTPS (related)
+
+YPSE --> DB : JDBC (store raw integration)
+YPSE --> MQ : AMQP (publish)
+
+BACK --> MQ : AMQP (publish)
+
+MQ --> SALE : AMQP (consume)
+SALE --> DB : JDBC (write sale + update status)
+
+SCH --> DB : JDBC (fetch ready sales)
+SCH --> ERP : HTTPS/Integration (batch sync)
+
+DB --> ADB : yearly archive (job/ETL)
+
+@enduml

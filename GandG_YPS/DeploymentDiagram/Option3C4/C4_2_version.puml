@@ -1,0 +1,96 @@
+@startuml
+title G&G Revamp - Container Diagram (Level 2) (C4 Theme, No Macros)
+
+left to right direction
+skinparam shadowing false
+skinparam roundcorner 18
+skinparam defaultFontName Arial
+skinparam defaultFontSize 14
+skinparam packageStyle rectangle
+skinparam ArrowColor #6B6B6B
+skinparam ArrowThickness 1
+
+' ===== C4-like colors =====
+' Person
+skinparam actor {
+  BackgroundColor #0B4F8A
+  BorderColor #0B4F8A
+  FontColor white
+}
+
+' External system (grey)
+skinparam rectangle<<external>> {
+  BackgroundColor #BDBDBD
+  BorderColor #8A8A8A
+  FontColor #111111
+}
+
+' Container (blue)
+skinparam rectangle<<container>> {
+  BackgroundColor #2D82C7
+  BorderColor #2D82C7
+  FontColor white
+}
+
+' Database (blue-ish)
+skinparam database {
+  BackgroundColor #2D82C7
+  BorderColor #2D82C7
+  FontColor white
+}
+
+' Queue (blue-ish)
+skinparam queue {
+  BackgroundColor #2D82C7
+  BorderColor #2D82C7
+  FontColor white
+}
+
+' Boundary style
+skinparam package {
+  BorderColor #9E9E9E
+  FontColor #333333
+}
+
+actor "POS User\nUses POS device" as Staff
+
+rectangle "POS Device (Sunmi/YPS POS)\nPOS Terminal" as POS <<external>>
+rectangle "YPS Service\nExternal" as YPS <<external>>
+rectangle "CCN Service\nExternal" as CCN <<external>>
+rectangle "Mobile & Other Eservice\nMPT / ATOM / U9" as MOB <<external>>
+rectangle "ERP (AX/365)\nExternal" as ERP <<external>>
+
+package "G&G System (Alibaba Cloud)" as GG {
+
+  rectangle "YPS Entry Service\n[Spring Boot]\nIngests/validates YPS transactions" as YPSE <<container>>
+
+  rectangle "Sale Service\n[Spring Boot]\nConsumes events\nWrites Sale + updates status" as SALE <<container>>
+
+  rectangle "G&G Backend Service\n[Spring Boot]\nBack-office APIs, monitoring,\nadmin operations" as BACK <<container>>
+
+  rectangle "Sale Scheduler\n[Spring Boot / Quartz]\nPolling, retries, scheduled jobs" as SCH <<container>>
+
+  queue "RabbitMQ\n[AMQP]\nAsync buffer for reliable\nprocessing & fan-out" as RMQ
+
+  database "G&G Database\n[RDBMS]\nSingle DB instance with schemas\n- g&g\n- archive" as DB
+}
+
+' ===== Relationships (match your screenshot style) =====
+Staff --> POS : Operates
+POS --> YPS : Calls\n[HTTPS]
+YPS --> YPSE : Sends/Pulls transactions\n[HTTPS]
+SCH --> YPS : Polls (if applicable)\n[HTTPS]
+
+YPSE --> DB : Write/Read\n[JDBC]
+SALE --> DB : Write/Read\n[JDBC]
+BACK --> DB : Write/Read\n[JDBC]
+SCH --> DB : Write/Read\n[JDBC]
+
+SALE --> RMQ : Publishes events\n[AMQP]
+RMQ --> BACK : Consumes for ERP sync\n[AMQP]
+BACK --> ERP : Push sales data\n[HTTPS/SOAP]
+
+CCN --> YPSE : Send data\n[HTTPS]
+MOB --> YPSE : Related calls\n[HTTPS]
+
+@enduml
