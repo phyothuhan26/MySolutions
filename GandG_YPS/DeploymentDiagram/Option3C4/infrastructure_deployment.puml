@@ -1,0 +1,96 @@
+@startuml
+title G&G Revamp - Kubernetes Deployment / Infrastructure Diagram
+
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+cloud "Alibaba Cloud" as ALI {
+
+  node "VPC" as VPC {
+
+    node "Public Subnet" as PUB {
+      node "SLB / Load Balancer" as SLB
+      node "Ingress Controller\n(NGINX Ingress)" as INGRESS
+    }
+
+    node "Private Subnet" as PRIV {
+
+      node "ACK Kubernetes Cluster" as K8S {
+
+        frame "Namespace: gng-prod" as NS {
+
+          node "Deployment: gng-frontend" as DEP_FE {
+            component "Pod(s): gng-frontend" as POD_FE
+            component "Service: frontend-svc (ClusterIP)" as SVC_FE
+          }
+
+          node "Deployment: gg-backend-eservice" as DEP_BE {
+            component "Pod(s): gg-backend" as POD_BE
+            component "Service: backend-svc (ClusterIP)" as SVC_BE
+          }
+
+          node "Deployment: yps-entry-service" as DEP_YPS {
+            component "Pod(s): yps-entry" as POD_YPS
+            component "Service: yps-entry-svc (ClusterIP)" as SVC_YPS
+          }
+
+          node "Deployment: sale-service" as DEP_SALE {
+            component "Pod(s): sale-service" as POD_SALE
+            component "Service: sale-svc (ClusterIP)" as SVC_SALE
+          }
+
+          node "CronJob: sale-scheduler\n(every 15 min)" as CRON {
+            component "Job Pod: scheduler-runner" as POD_SCH
+          }
+
+          node "StatefulSet: rabbitmq-cluster" as RMQSS {
+            queue "RabbitMQ Pods (3)\n(rmq-0, rmq-1, rmq-2)" as RMQPODS
+            component "Service: rabbitmq (ClusterIP)" as SVC_RMQ
+          }
+        }
+      }
+
+      database "RDS / MySQL\nG&G DB Instance\nSchemas: gng + archive" as DB
+      node "Object Storage (OSS)\n(Optional fail-excel)" as OSS
+    }
+  }
+}
+
+cloud "External Services" as EXT {
+  node "YPS Service" as YPS
+  node "CCN Eservice" as CCN
+  node "ERP (AX / 365 / DX)" as ERP
+  node "POS Devices\n(Sunmi / YPS POS)" as POS
+}
+
+'======================
+' Traffic / Networking
+'======================
+POS --> YPS : HTTPS
+YPS --> SLB : HTTPS (push/callback)\nOR polled by scheduler
+
+SLB --> INGRESS : L7 routing
+INGRESS --> SVC_FE : /web
+INGRESS --> SVC_BE : /api/backend
+INGRESS --> SVC_YPS : /api/yps-entry
+INGRESS --> SVC_SALE : /api/sale
+
+'======================
+' Internal Calls
+'======================
+POD_YPS --> DB : JDBC
+POD_SALE --> DB : JDBC
+POD_BE --> DB : JDBC
+POD_SCH --> DB : JDBC
+
+POD_YPS --> SVC_RMQ : AMQP publish
+SVC_RMQ --> POD_SALE : AMQP consume
+
+POD_SCH --> ERP : HTTPS/SOAP sync
+POD_BE --> ERP : HTTPS/SOAP (if backend pushes)
+
+POD_YPS --> OSS : write fail file (optional)
+
+CCN --> INGRESS : HTTPS (integration)
+
+@enduml

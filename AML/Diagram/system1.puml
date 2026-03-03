@@ -1,0 +1,140 @@
+@startuml
+title CTZPay AML System - Overall Architecture (Screening + TTR + STR)
+
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultTextAlignment center
+skinparam package {
+  BorderStyle dashed
+  BorderThickness 1
+}
+skinparam rectangle {
+  RoundCorner 12
+  BorderThickness 1
+}
+skinparam database {
+  BorderThickness 1
+}
+
+' =======================
+' ACTORS / CHANNELS
+' =======================
+actor "Compliance Officer\n(Compliance Team)" as COM
+actor "Branch / Ops User" as OPS
+
+package "Channels / Source Systems" {
+  rectangle "Core Banking / Wallet / Mobifin\n(Transaction & Customer Data)" as CORE
+  rectangle "Other Internal Systems\n(via API)" as OTH
+}
+
+' =======================
+' AML PLATFORM
+' =======================
+package "CTZPay AML Platform" {
+
+  package "UI Layer" {
+    rectangle "AML Web Portal\n(Screening, Cases, Reports)" as UI
+  }
+
+  package "API & Application Layer" {
+    rectangle "AML API Gateway / Backend API" as API
+
+    rectangle "Customer Screening Service\n(UniqueID/Name/Alias Match)" as SCREEN
+    rectangle "List Management Service\n(Domestic Upload/Delist)" as LISTM
+
+    rectangle "Rules / Monitoring Engine\n(Red Flags, Threshold, Patterns)" as RULES
+    rectangle "Case & Workflow Service\n(Alert Settlement, Approval)" as CASE
+
+    rectangle "TTR Reporting Service\n(EOD + T+1 XML/Excel)" as TTR
+    rectangle "STR Reporting Service\n(Generate STR + Dashboard)" as STR
+
+    rectangle "Risk Profiling Service\n(Low/Med/High Risk)" as RISK
+    rectangle "User & Role Management\n(RBAC)" as IAM
+
+    rectangle "Scheduler / Batch Jobs\n(Daily Screening, EOD Reports)" as SCH
+  }
+
+  package "Data Layer" {
+    database "AML Operational DB\n(KYC, Txn, Screening, Alerts,\nCases, Risk, Reports)" as AMLDB
+    database "Audit Log DB\n(User actions, uploads, changes)" as AUDIT
+    database "File Storage\n(Uploads, Exports)" as FILES
+  }
+}
+
+' =======================
+' EXTERNAL DATA SOURCES / REGULATOR
+' =======================
+package "External Risk Data Sources" {
+  rectangle "International Lists Feed\n(UN/EU/OFAC/UK/Intl PEP)\nDaily Sync" as INTL
+  rectangle "Domestic Lists\n(PEP/Sanction/Blacklist/Adverse Media)\nExcel Upload" as DOM
+}
+
+package "Regulators" {
+  rectangle "MFIU / CBM\n(TTR/STR Submission)" as REG
+}
+
+' =======================
+' FLOWS
+' =======================
+
+' Users -> Portal -> API
+COM --> UI
+OPS --> UI
+UI --> API
+
+' Core systems -> AML API
+CORE --> API : Customer + Transaction Data
+OTH --> API : Optional Integration APIs
+
+' API -> Services
+API --> SCREEN
+API --> LISTM
+API --> RULES
+API --> CASE
+API --> TTR
+API --> STR
+API --> RISK
+API --> IAM
+
+' Services -> DB / Audit / Files
+SCREEN --> AMLDB
+LISTM --> AMLDB
+RULES --> AMLDB
+CASE --> AMLDB
+TTR --> AMLDB
+STR --> AMLDB
+RISK --> AMLDB
+IAM --> AMLDB
+
+SCREEN --> AUDIT
+LISTM --> AUDIT
+CASE --> AUDIT
+IAM --> AUDIT
+
+LISTM --> FILES : Import Excel
+TTR --> FILES : Export XML/Excel
+STR --> FILES : Export Reports
+
+' International lists integration (daily)
+SCH --> INTL : Daily fetch/sync
+INTL --> LISTM
+LISTM --> AMLDB : Update watchlists
+
+' Domestic lists integration (manual upload)
+COM --> LISTM : Upload Excel (Domestic PEP/Sanction/\nBlacklist/Adverse Media)
+DOM --> LISTM
+LISTM --> AMLDB : Real-time update
+
+' Screening + Monitoring logic
+SCREEN --> RULES : Screening result / match score
+RULES --> CASE : Create alerts / cases
+CASE --> STR : If suspicious confirmed\n-> STR generation
+
+' Reporting
+SCH --> TTR : EOD/T+1 generate
+SCH --> STR : EOD summaries (if required)
+
+TTR --> REG : Submit TTR (XML/PGP as needed)
+STR --> REG : Submit STR (XML/PGP as needed)
+
+@enduml

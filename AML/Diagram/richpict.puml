@@ -1,0 +1,162 @@
+@startuml
+title CTZPay AML System - Detailed Rich Picture (Business & Data View)
+
+skinparam shadowing false
+skinparam linetype ortho
+skinparam defaultTextAlignment center
+skinparam package {
+  BorderStyle dashed
+}
+skinparam rectangle {
+  RoundCorner 20
+}
+
+actor "Customer" as CUS
+actor "Branch / Ops User" as OPS
+actor "Compliance Officer" as CO
+actor "Regulator\n(MFIU / CBM)" as REG
+
+rectangle "Core Banking / Wallet / Mobifin\n(Transaction System)" as CORE
+rectangle "KYC Database\n(Customer Profile, Risk, ID Info)" as KYC
+
+rectangle "International Lists\n(UN/EU/OFAC/UK/Intl PEP)\nDaily Auto Sync" as INTL
+rectangle "Domestic Lists\n(PEP / Sanction / Blacklist /\nAdverse Media)" as DOM
+
+rectangle "AML SYSTEM" as AML
+
+rectangle "Screening Engine\n(ID / Name / Alias Match)" as SCREEN
+rectangle "Bulk Screening Module\n(Excel Upload)" as BULK
+rectangle "Rule Engine\n(Threshold + Red Flags)" as RULE
+rectangle "Case Management\n(Alert Investigation)" as CASE
+
+rectangle "TTR Generator\n(EOD + T+1 XML/Excel)" as TTR
+rectangle "STR Generator\n(Suspicious Report)" as STR
+rectangle "Risk Profiling\n(Low/Medium/High)" as RISK
+rectangle "Dashboard & Custom Reports" as DASH
+
+' ========================
+' CUSTOMER FLOW
+' ========================
+
+CUS --> CORE : "Perform transaction\n(Deposit / Transfer / Remittance)"
+note on link
+Transaction data includes:
+- Amount
+- Channel
+- Time
+- Account
+end note
+
+CUS --> KYC : "Provide KYC during onboarding\n(NRC, Phone, Name, Address)"
+note on link
+KYC used for:
+- Risk classification
+- Screening
+end note
+
+CORE --> AML : "Send transaction data\n(real-time or batch)"
+KYC --> AML : "Send customer profile data"
+
+' ========================
+' SCREENING FLOW
+' ========================
+
+OPS --> SCREEN : "Search by Unique ID / Phone\nIf no match → search by Name"
+note on link
+Supports:
+- Alias matching
+- Fuzzy search
+- History tracking
+end note
+
+OPS --> BULK : "Upload Excel file\n(Customer list)"
+note on link
+Bulk Screening:
+- Excel upload
+- System returns possible matches
+- Exportable results
+end note
+
+INTL --> AML : "Daily automatic update"
+note on link
+International sanctions & PEP
+auto-synced daily
+end note
+
+CO --> DOM : "Upload Excel file\n(Domestic PEP/Sanction/Blacklist/Adverse Media)"
+note on link
+Real-time update:
+- Insert only new records
+- Do not replace full list
+end note
+
+DOM --> AML : "Watchlist updated immediately"
+
+AML --> SCREEN
+SCREEN --> RULE : "Match score / Hit result"
+
+' ========================
+' MONITORING & RULES
+' ========================
+
+AML --> RULE : "Transaction monitoring"
+
+note right of RULE
+Rule Types:
+1. Threshold amount
+2. Aggregated daily amount
+3. High-risk country
+4. Velocity pattern
+5. Red flag logic
+end note
+
+RULE --> RISK : "Adjust risk level\nbased on behavior"
+RULE --> CASE : "Generate alert\n(if suspicious)"
+
+' ========================
+' TTR PROCESS
+' ========================
+
+RULE --> TTR : "If amount ≥ threshold\n(single or aggregated)"
+
+note on link
+TTR Logic:
+- Single large txn OR
+- Multiple txns same day
+- Generate EOD report
+- Produce T+1 XML + Excel
+end note
+
+TTR --> REG : "Submit TTR report\n(T+1 compliance)"
+
+' ========================
+' STR PROCESS
+' ========================
+
+CASE --> CO : "Compliance investigates alert"
+note on link
+Officer reviews:
+- Transaction history
+- KYC documents
+- Screening result
+- Risk profile
+end note
+
+CO --> STR : "If suspicious confirmed\nGenerate STR"
+
+note on link
+STR includes:
+- Suspicious details
+- Investigation notes
+- Supporting documents
+end note
+
+STR --> REG : "Submit STR report"
+
+' ========================
+' REPORTING & DASHBOARD
+' ========================
+
+AML --> DASH : "Real-time dashboard\nPending alerts / Risk stats"
+
+@enduml

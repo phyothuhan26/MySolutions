@@ -1,0 +1,72 @@
+@startuml
+title DFD Level 1 - G&G Revamp (Inside G&G)
+
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+'========================
+' External Entities
+'========================
+rectangle "E1: Staff" as E_Staff
+rectangle "E2: POS Device\n(Sunmi POS / YPS POS)" as E_POS
+rectangle "E3: YPS Service" as E_YPS
+rectangle "E4: CCN Eservice" as E_CCN
+rectangle "E5: ERP\n(Microsoft AX / 365)" as E_ERP
+
+'========================
+' Processes (inside G&G)
+'========================
+circle "P1: G&G Frontend" as P_FE
+circle "P2: YPS Entry Service\n(Ingest/Import)" as P_YPS_ENTRY
+circle "P3: Sale Service\n(Process Sale)" as P_SALE
+circle "P4: G&G Backend Eservice\n(Admin/Support)" as P_BE
+circle "P5: G&G Scheduler\n(Every ~15 min)" as P_SCH
+circle "P6: RabbitMQ\n(Message Broker)" as P_MQ
+circle "P7: Archive Job" as P_ARC
+
+'========================
+' Data Stores
+'========================
+database "D1: Integration Table" as D_INT
+database "D2: YPS Integration Table" as D_YPSINT
+database "D3: Queue Process Table" as D_QP
+database "D4: Sale Table" as D_SALE
+database "D5: Sale Archive Table" as D_ARC
+
+'========================
+' Flows
+'========================
+
+' Users
+E_Staff --> P_FE : Use UI (HTTPS)
+P_FE --> P_BE : Admin/API calls (HTTPS)
+
+' POS -> YPS -> G&G
+E_Staff --> E_POS : Operate POS
+E_POS --> E_YPS : Send Txn Data (HTTPS)
+E_YPS --> P_YPS_ENTRY : Send/Callback/Import Trigger (HTTPS)
+E_CCN --> P_YPS_ENTRY : Send Data / Integration (HTTPS)
+
+' Persist raw/integration records
+P_YPS_ENTRY --> D_YPSINT : Save/Update YPS status (JDBC)
+P_YPS_ENTRY --> D_INT : Save integration payload (JDBC)
+
+' Publish to MQ for async processing
+P_YPS_ENTRY --> P_MQ : Publish message (AMQP)
+P_YPS_ENTRY --> D_QP : Init queue status\n(mq_status,retry_count) (JDBC)
+
+' Consume and process sale
+P_MQ --> P_SALE : Deliver message (AMQP)
+P_SALE --> D_SALE : Insert/Update sale (JDBC)
+P_SALE --> D_QP : Update processing status (JDBC)
+P_SALE --> D_YPSINT : Update YPS processing status (JDBC)
+
+' Scheduler sync to ERP
+P_SCH --> D_SALE : Fetch ready sales (JDBC)
+P_SCH --> E_ERP : Sync sales (HTTPS/SOAP/API)
+
+' Archive
+P_ARC --> D_SALE : Read completed/old sales (JDBC)
+P_ARC --> D_ARC : Write sale archive (JDBC)
+
+@enduml

@@ -4,13 +4,13 @@ hide footbox
 
 participant "G&GScheduler" as SCH
 participant "YPS File Server" as FS
-participant "G&G Import Service" as IMP
+participant "G&GBackend" as IMP
 database "Sale Header" as SHeader
 database "yps_integration" as YPSDB
 database "fail_record" as FDB
 note right of FDB
   record fail transaction info
-  accesstime,processstatus,session_status , total_session ,retrycount,filename,totaltransaction,remark
+  accesstime,processstatus,import_status,session_status , total_session ,retrycount,filename,totaltransaction,remark
 end note
 database "fail_session" as FDBD
 note right of FDBD
@@ -85,6 +85,7 @@ FDB --> SCH: OK
 
 deactivate IMP
 @enduml
+
 
 
 

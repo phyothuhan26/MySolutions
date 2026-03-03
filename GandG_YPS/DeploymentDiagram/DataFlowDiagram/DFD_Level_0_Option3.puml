@@ -1,0 +1,31 @@
+@startuml
+title DFD Level 0 (Context) - G&G Revamp
+
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+' External Entities
+rectangle "E1: Staff" as E_Staff
+rectangle "E2: POS Device\n(Sunmi POS / YPS POS)" as E_POS
+rectangle "E3: YPS Service" as E_YPS
+rectangle "E4: CCN Eservice" as E_CCN
+rectangle "E5: ERP\n(Microsoft AX / 365)" as E_ERP
+rectangle "E6: Mobile & Other eService\n(MPT / ATOM / U9)" as E_Mobile
+
+' Main Process
+circle "P0: G&G System\n(Alibaba Cloud)" as P0
+
+' Data Flows
+E_Staff --> E_POS : Operate POS
+E_Staff --> P0 : Use G&G Frontend (HTTPS)
+
+E_POS --> E_YPS : Send Txn Data (HTTPS)
+E_YPS --> P0 : Send/Callback Txn Data (HTTPS)
+
+E_CCN --> P0 : Send Data / Integration (HTTPS)
+
+P0 --> E_ERP : Sync Sales (Scheduled) (HTTPS/SOAP/API)
+
+E_Mobile --> P0 : Related integration (if any)
+
+@enduml
