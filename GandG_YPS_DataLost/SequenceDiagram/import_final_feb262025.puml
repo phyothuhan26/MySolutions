@@ -7,10 +7,14 @@ skinparam sequenceMessageAlign center
 actor ImportService as IMP
 participant YPS_FileServer as YFS
 participant "SaleService" as SS
-
+database acc_config as fsc
+note left of fsc
+require two row(g&g,capital):
+-name:g&g_failserver/captial_failserver,accountname,password,configfor failfileserver ,additionaldata:{"filepath":"","accesstype":"ftp/OSS"}
+end note
 database import_record as IR
 note right of IR
-Import summary:
+Import Record:
 accestime, importstatus,
 activeSessionCount, failedTxCount,
 filename, totalTxCount, isEmailSent,
@@ -41,19 +45,35 @@ participant MailService as MAIL
 participant MailConfig as MC
 note right of MC
 Mail configuration source:
-Table:mail_config
--provider ,username ,password ,remark
+Table:acc_config
+-name:g&g_mailservice,configfor g&g_mailsetting ,accountname,password,additionaldata:
+{"provider":"SMTP", "host":"...", "port":587, "remark":"..."}
 Table: mail_template
 - template_id ,subject ,content , mail_for = 'FAIL_MAIL' ,cc_mails ,bcc_mails
-
 Table: mail_participant
 - template_id (FK),recipient_email
-EmailContent:Only add TransactionNumber as CSV
+EmailContent:Only add TransactionNumber as CSV for fail mail
 end note
-== IMPORT PROCESS ==
+== IMPORT PROCESS (Run  1:30 am at everyday)==
 
-IMP -> YFS: Fetch CSV File
-YFS --> IMP: Return CSV Data
+IMP -> fsc : Get file server filepath  by using settingfor failfileserver
+fsc --> IMP : return info (path/credential/prefix)
+
+IMP -> YFS : Fetch CSV File(path)
+
+alt File fetch + read OK
+  YFS -> YFS : fetch latest file (retry up to 3)
+  YFS --> IMP : Return CSV Data [ok state]
+  note  right of YFS
+   check  latest file name is not match with  file name in import_record
+  end note
+else File fetch/read FAILED after retries
+  YFS -> YFS : fetch latest file (retry up to 3)\n(all attempts failed)
+  YFS -> MAIL : sendMailForFailFileAccess(filename/path, reason)
+  YFS --> IMP : Return error / empty result [fail state]
+  IMP -> IMP : Mark job failed / stop process
+end
+
 
 note right of IMP
 CSV may contain multiple stores and tx.
@@ -97,7 +117,7 @@ SS --> IMP: result (success/fail)
 IMP -> IR: Update Import status=Success,\ncompletedAt=now
 IR --> IMP: OK
 
-== 7AM SHIFT CHECK ==
+== 7:30 AM SHIFT CHECK ==
 
 SCH -> IR: Check import_record where activeSessionCount > 0
 note right of IR
@@ -127,7 +147,7 @@ else No PROCESS
     note right: No action needed
 end
 
-== 7AM FAILED EMAIL CHECK ==
+== 7:30AM FAILED EMAIL CHECK ==
 
 SCH -> IR: Find failedTxCount > 0 AND isEmailSent=false
 IR --> SCH: candidates
@@ -156,5 +176,6 @@ else No failed record
 end
 
 @enduml
+
 
 
