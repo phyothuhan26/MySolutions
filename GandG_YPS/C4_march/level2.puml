@@ -1,0 +1,46 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title YPS Integration - Container View (Level 2)
+
+LAYOUT_LEFT_RIGHT()
+skinparam shadowing false
+
+Person(staff, "Staff", "Uses POS")
+
+System_Ext(pos, "POS Device", "Sunmi / YPS POS")
+System_Ext(yps, "YPS Service", "External")
+System_Ext(erp, "ERP", "AX / 365")
+
+System_Boundary(gg, "G&G Platform (Alibaba Cloud)") {
+
+  Container(apiGw, "API Gateway", " LB", "Routes external requests, security, throttling")
+
+  Container(backend, "G&G Backend Eservice", "Spring Boot", "Validates, persists idempotency, publishes events")
+
+  ContainerQueue(rmq, "RabbitMQ", "AMQP", "Async queue for processing and retry isolation")
+
+  Container(worker, "MQ Consumer Worker", "Spring Boot", "Consumes events, writes Sale, updates queue log")
+
+  Container(scheduler, "Sale Scheduler", "Spring Scheduler / Quartz", "Periodic sync / import / reconciliation")
+
+  ContainerDb(coreDb, "G&G Database", "MySQL / MSSQL", "Integration, Sale, QueueLog tables")
+
+  ContainerDb(archiveDb, "Archive Database", "MySQL / MSSQL", "Long-term archive tables")
+}
+
+Rel(staff, pos, "Operate", "")
+Rel(pos, yps, "Send transaction", "HTTPS")
+Rel(yps, apiGw, "API calls", "HTTPS")
+Rel(apiGw, backend, "Route requests", "HTTPS")
+
+Rel(backend, coreDb, "Write/Read", "JDBC")
+Rel(backend, rmq, "Publish events", "AMQP")
+Rel(rmq, worker, "Consume events", "AMQP")
+Rel(worker, coreDb, "Write Sale + QueueLog", "JDBC")
+
+Rel(scheduler, coreDb, "Fetch pending / retry", "JDBC")
+Rel(scheduler, erp, "Sync sales", "HTTPS/API")
+Rel(coreDb, archiveDb, "Archive (batch)", "Job/ETL")
+
+@enduml

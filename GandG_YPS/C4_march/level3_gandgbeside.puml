@@ -1,0 +1,37 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title YPS Integration - Component View (Level 3)
+LAYOUT_LEFT_RIGHT()
+skinparam shadowing false
+
+System_Ext(yps, "YPS Service", "External")
+Container_Ext(apiGw, "API Gateway", "WSO2 / LB", "Routes and secures inbound calls")
+ContainerQueue_Ext(rmq, "RabbitMQ", "AMQP", "Async events")
+ContainerDb_Ext(coreDb, "G&G Database", "MySQL / MSSQL", "Stores integration + sale data")
+
+Container_Boundary(backend, "G&G Backend Eservice (Spring Boot)") {
+  Component(ypsController, "YPS Controller", "REST Controller", "Receives YPS transactions and returns success code (e.g., 000000)")
+  Component(authFilter, "Auth / Signature Filter", "Filter/Interceptor", "Validates request signature/token, rejects invalid calls")
+  Component(validator, "Request Validator", "Validator", "Validates required fields, formats, and basic business constraints")
+  Component(idemService, "Idempotency Service", "Service", "Ensures same transactionId/censeq is processed once")
+  Component(integrationRepo, "Integration Repository", "JPA/JDBC Repository", "Read/Write Integration / YPS_Integration tables")
+  Component(eventFactory, "Event Mapper", "Mapper", "Transforms request into internal domain event payload")
+  Component(outboxPublisher, "Event Publisher", "Publisher", "Publishes event to RabbitMQ for async processing")
+  Component(auditLogger, "Audit Logger", "Service", "Logs success/failure payloads and correlationId for traceability")
+}
+
+Rel(yps, apiGw, "Send transaction", "HTTPS")
+Rel(apiGw, ypsController, "Route request", "HTTPS")
+Rel(ypsController, authFilter, "Pass through", "")
+Rel(authFilter, validator, "Validate request", "")
+Rel(validator, idemService, "Check idempotency", "")
+Rel(idemService, integrationRepo, "Read/Write", "JDBC")
+Rel(integrationRepo, coreDb, "Persist", "JDBC")
+Rel(idemService, eventFactory, "Build domain event", "")
+Rel(eventFactory, outboxPublisher, "Create message", "")
+Rel(outboxPublisher, rmq, "Publish event", "AMQP")
+Rel(ypsController, auditLogger, "Write audit logs", "")
+Rel(auditLogger, coreDb, "Persist audit / logs", "JDBC")
+
+@enduml

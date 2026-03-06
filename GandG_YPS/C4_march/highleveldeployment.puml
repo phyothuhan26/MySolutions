@@ -1,0 +1,56 @@
+@startuml
+title YPS Integration - Deployment Diagram (High Level)
+skinparam shadowing false
+skinparam linetype ortho
+
+actor "Staff" as staff
+node "POS Device\n(Sunmi / YPS POS)" as pos
+
+cloud "Internet" as internet
+
+node "External Vendors" {
+  node "YPS Service" as yps
+  node "ERP (AX/365)" as erp
+}
+
+node "Alibaba Cloud (VPC)" as vpc {
+
+  node "Public Subnet" {
+    node "Public Load Balancer" as alb
+    node "WSO2 API Gateway" as wso2
+  }
+
+  node "Private Subnet" {
+
+    node "G&G App Tier" as apptier {
+      node "G&G Backend Eservice\n(Spring Boot)" as backend
+      node "MQ Consumer Worker\n(Spring Boot)" as worker
+      node "Sale Scheduler\n(Quartz/Spring Scheduler)" as scheduler
+    }
+
+    node "Messaging" {
+      node "RabbitMQ Cluster" as rmq
+    }
+
+    database "G&G Database\n(MySQL/MSSQL)" as db
+    database "Archive Database" as adb
+  }
+}
+
+staff --> pos
+pos --> internet
+internet --> yps : HTTPS
+yps --> alb : HTTPS
+alb --> wso2 : HTTPS
+wso2 --> backend : HTTPS
+
+backend --> db : JDBC
+backend --> rmq : AMQP Publish
+rmq --> worker : AMQP Consume
+worker --> db : JDBC
+
+scheduler --> db : JDBC (fetch/pending)
+scheduler --> erp : HTTPS/API (sync)
+db --> adb : batch/archive job
+
+@enduml

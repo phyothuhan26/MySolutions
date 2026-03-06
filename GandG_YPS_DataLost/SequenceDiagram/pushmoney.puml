@@ -1,0 +1,39 @@
+@startuml
+title pushMoney(req) - Summary Flow
+
+start
+:Parse request JSON;
+
+if (Invalid input?\nmissing fields / bad signature) then (Yes)
+  :Return 400 (fail);
+  :Save integration history;
+  stop
+endif
+
+:Load store by networkName;
+:Load bill + product;
+if (Bill/Product missing) then (Yes)
+  :Return 404;
+  :Save integration history;
+  stop
+endif
+
+if (Store not found) then (Yes)
+  :Resolve/create default store + session;
+endif
+
+:Build sale transaction\n(charging rule, amount, metadata);
+if (Build/persist failed) then (Yes)
+  :Return 500;
+  :Save integration history;
+  stop
+endif
+
+:Save sale transaction;
+:Insert commission records;
+:Prepare print/reprint summary;
+:Return 200 (success);
+:Save integration history;
+stop
+@enduml
+

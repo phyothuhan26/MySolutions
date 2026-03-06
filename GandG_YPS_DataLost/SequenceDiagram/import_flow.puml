@@ -1,0 +1,82 @@
+@startuml
+title YPS CSV Import & ShiftTx Scheduler
+
+hide footbox
+skinparam sequenceMessageAlign center
+
+actor ImportService as IMP
+participant YPS_FileServer as YFS
+participant "SaleService" as SS
+database acc_config as fsc
+database import_record as IR
+
+database import_session as IS
+
+database CDSG_ESERVICEHEADERTABLE as SH
+database SaleTransaction as ST
+
+database yps_integration as YPS
+database workshift as WT
+
+actor "ShiftTxShceduler" as SCH
+participant MailService as MAIL
+participant MailConfig as MC
+
+== IMPORT PROCESS (Run  1:30 am at everyday)==
+
+IMP -> fsc : Get file server filepath  by using settingfor failfileserver
+fsc --> IMP : return info (path/credential/prefix)
+
+IMP -> YFS : Fetch CSV File(path)
+
+alt File fetch + read OK
+  YFS -> YFS : fetch latest file (retry up to 3)
+  YFS --> IMP : Return CSV Data [ok state]
+else File fetch/read FAILED after retries
+  YFS -> YFS : fetch latest file (retry up to 3)\n(all attempts failed)
+  YFS -> MAIL : sendMailForFailFileAccess(filename/path, reason)
+  YFS --> IMP : Return error / empty result [fail state]
+  IMP -> IMP : Mark job failed / stop process
+end
+
+
+
+IMP -> IR: Insert import_record
+
+IMP -> YPS :insert tx record(isOnline=false)
+
+IMP -> IR:updateTransactionCount(
+IMP -> SH: Create Sale Header (storeId)
+SH --> IMP: saleHeaderId
+
+IMP -> IS: Insert Import Session (ACTIVE)
+IS --> IMP: OK
+
+IMP -> IR: Update activeSessionCount +1
+IR --> IMP: OK
+
+
+
+IMP -> SS: processSaleTransaction()
+
+alt Success
+    SS -> ST: Store sale info
+    SS --> IMP: success
+else Failed
+    SS -> YPS: Insert/Update failed record
+    SS --> IMP: failed
+    IMP -> IR: Update failedTxCount +1
+end
+
+SS --> IMP: result (success/fail)
+
+IMP -> IR: Update Import
+IR --> IMP: OK
+
+
+
+@enduml
+
+
+
+

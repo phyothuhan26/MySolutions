@@ -1,0 +1,31 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+title YPS Integration - System Context (Level 1)
+
+' Optional: cleaner look
+LAYOUT_LEFT_RIGHT()
+skinparam shadowing false
+
+Person(staff, "Staff", "Uses POS & G&G Frontend to serve customers")
+System_Ext(pos, "POS Device", "Sunmi POS / YPS POS")
+System_Ext(yps, "YPS Service", "External payment / transaction source")
+System_Ext(erp, "ERP", "Microsoft AX / 365")
+System_Ext(mobile, "CCNEservice", "MPT / ATOM / U9 /Other Subscribe service")
+
+
+System_Boundary(gg, "G&G Platform (Alibaba Cloud)") {
+  System(backend, "G&G Backend Eservice", "Accepts YPS & G&G transactions, processes sales, syncs ERP")
+}
+
+Rel(staff, pos, "Operate", "")
+Rel(pos, yps, "Send transaction", "HTTPS")
+Rel(yps, backend, "Send transaction", "HTTPS")
+
+Rel(backend, erp, "Sync sales", "HTTPS / API")
+Rel(backend, mobile, "Consume / integrate", "HTTPS")
+
+
+@enduml
+
+

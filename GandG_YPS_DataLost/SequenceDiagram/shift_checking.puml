@@ -1,0 +1,55 @@
+@startuml
+title YPS CSV Import & ShiftTx Scheduler
+
+hide footbox
+skinparam sequenceMessageAlign center
+
+
+database acc_config as fsc
+database import_record as IR
+
+database import_session as IS
+
+database CDSG_ESERVICEHEADERTABLE as SH
+database SaleTransaction as ST
+
+database yps_integration as YPS
+database workshift as WT
+
+actor "ShiftTxShceduler" as SCH
+participant MailService as MAIL
+participant MailConfig as MC
+
+
+SCH -> IR: Check import_record where activeSessionCount > 0
+note right of IR
+may be you found totalActiveSessionCount as 5 (3 is from wed and 2 is today)
+- Find in sale table where status is not process and fromOnline=false
+- and decrease activesesssioncount base on import_session
+end note
+IR --> SCH: return result
+
+note right of SCH
+For each active session:
+Check if any SaleTransaction status=PROCESS and fromOnline=false
+If PROCESS exists -> close shift and session,
+then activeSessionCount--
+end note
+
+SCH -> ST: Check any status=PROCESS (per session/store) in sale and  check workshift which is still open
+ST --> SCH: exists? (true/false)
+
+alt PROCESS found
+    SCH -> WT: Close Workshift
+    WT --> SCH: OK
+    IS --> SCH: OK
+    SCH -> IR: Decrease activeSessionCount
+    IR --> SCH: OK
+else No PROCESS
+    note right: No action needed
+end
+@enduml
+
+
+
+

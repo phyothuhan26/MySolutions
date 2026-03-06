@@ -1,0 +1,52 @@
+@startuml
+title YPS CSV Import & ShiftTx Scheduler (Simplified View)
+
+hide footbox
+skinparam sequenceMessageAlign center
+
+
+database acc_config as fsc
+database import_record as IR
+
+database import_session as IS
+
+database CDSG_ESERVICEHEADERTABLE as SH
+database SaleTransaction as ST
+
+database yps_integration as YPS
+database workshift as WT
+
+actor "ShiftTxShceduler" as SCH
+participant MailService as MAIL
+participant MailConfig as MC
+
+SCH -> IR: Find failedTxCount > 0 AND isEmailSent=false
+IR --> SCH: candidates
+
+
+note right of SCH
+Date range:
+from = lastEmailSentAt (or importStartAt)
+to = now
+Fetch FAIL records where fromOnline=false
+end note
+
+SCH -> YPS: Fetch failed records\n(status=FAIL, fromOnline=false,\nfailAt between from..to)
+YPS --> SCH: failed list
+
+alt Fail records exist
+    SCH -> MAIL: Send failure report (failed list)
+    MAIL -> MC: Load SMTP config
+    MC --> MAIL: config
+    MAIL --> SCH: Email sent
+
+    SCH -> IR: Update isEmailSent=true,\nlastEmailSentAt=now
+    IR --> SCH: OK
+else No failed record
+    note right: No email sent
+end
+@enduml
+
+
+
+

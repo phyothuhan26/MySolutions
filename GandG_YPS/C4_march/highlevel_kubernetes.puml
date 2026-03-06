@@ -1,0 +1,83 @@
+@startuml
+title YPS Integration - Deployment Diagram (Kubernetes)
+skinparam shadowing false
+skinparam linetype ortho
+
+cloud "Internet" as internet
+
+node "External Vendors" {
+  node "YPS Service" as yps
+  node "ERP (AX/365)" as erp
+  node "SMS Provider" as sms
+  node "Firebase" as fb
+}
+
+node "Alibaba Cloud - Kubernetes Cluster (ACK)" as k8s {
+
+  node "Ingress / Edge" {
+    node "Cloud Load Balancer" as clb
+    node "Ingress Controller" as ing
+  }
+
+  node "Namespace: gg-prod" as ns {
+
+    node "WSO2 API Manager" as wso2 {
+      node "wso2-gw pod(s)" as wso2pods
+    }
+
+    node "Backend Workloads" {
+
+      node "Deployment: gg-backend-eservice" as dep1 {
+        node "backend pod(s)" as backendpods
+      }
+
+      node "Deployment: mq-consumer-worker" as dep2 {
+        node "worker pod(s)" as workerpods
+      }
+
+      node "CronJob/Deployment: sale-scheduler" as dep3 {
+        node "scheduler pod(s)" as schedulerpods
+      }
+    }
+
+    node "Messaging" {
+      node "RabbitMQ (StatefulSet)" as rmq {
+        node "rmq-0" as rmq0
+        node "rmq-1" as rmq1
+        node "rmq-2" as rmq2
+      }
+    }
+
+    node "Observability" {
+      node "Logging/Monitoring\n(Prometheus/Grafana/ELK)" as obs
+    }
+  }
+}
+
+database "G&G DB\n(RDS/MySQL/MSSQL)" as db
+database "Archive DB" as adb
+
+yps --> internet
+internet --> clb : HTTPS
+clb --> ing : HTTPS
+ing --> wso2pods : HTTPS
+wso2pods --> backendpods : HTTPS
+
+backendpods --> db : JDBC
+backendpods --> rmq0 : AMQP publish
+rmq0 --> workerpods : AMQP deliver
+workerpods --> db : JDBC
+
+schedulerpods --> db : JDBC
+schedulerpods --> erp : HTTPS/API
+backendpods --> sms : HTTPS
+backendpods --> fb : HTTPS
+
+db --> adb : archive job/batch
+backendpods --> obs
+workerpods --> obs
+wso2pods --> obs
+schedulerpods --> obs
+rmq0 --> obs
+
+@enduml

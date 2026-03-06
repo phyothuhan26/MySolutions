@@ -1,0 +1,45 @@
+@startuml
+title YPS System - Kubernetes Deployment Diagram
+
+skinparam shadowing false
+skinparam linetype ortho
+
+node "Internet"
+
+node "WSO2 API Gateway\n(Pod)" as wso2
+
+node "Alibaba Cloud ACK\n(Kubernetes Cluster)" {
+
+  node "Pod\nG&G Backend Eservice\n(Spring Boot)" as backend
+
+  node "Pod\nMQ Consumer Worker" as worker
+
+  node "Pod\nSale Scheduler\n(Cron Job)" as scheduler
+
+  node "Pod\nRabbitMQ" as rabbitmq
+
+}
+
+database "RDS MySQL" as db
+
+node "External Systems" {
+  node "ERP"
+  node "Firebase"
+  node "SMS Provider"
+}
+
+"Internet" --> wso2
+wso2 --> backend
+
+backend --> rabbitmq
+rabbitmq --> worker
+worker --> db
+
+scheduler --> db
+scheduler --> ERP
+
+backend --> Firebase
+backend --> "SMS Provider"
+
+@enduml
+

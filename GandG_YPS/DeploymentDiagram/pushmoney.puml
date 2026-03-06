@@ -1,0 +1,51 @@
+@startuml
+title pushMoney(req) - Summarized Activity Flow
+
+start
+:Parse request JSON -> YPSData;
+
+if (Invalid input?\n(signature empty OR required missing OR signature mismatch)) then (Yes)
+  :Build fail response\n(result=000001);
+  :Return 400;
+else (No)
+
+  :Load store by networkName;
+  :Load bill (by ypsBillerId);
+  :Load product (by transactionType);
+
+  if (Bill/Product missing?) then (Yes)
+    :Return 404;
+  else (No)
+
+    if (Store found?) then (Yes)
+      :Resolve WorkShiftAction\n(active else latest inactive);
+      :Resolve cashierId;
+      :Build SaleTransaction\n(amount + charging rule + metadata);
+
+      if (Build failed?) then (Yes)
+        :Return 500;
+      else (No)
+        :Save SaleTransaction;
+        if (Persist failed?) then (Yes)
+          :Return 500;
+        else (No)
+          :Insert commission records;
+          :Prepare print / reprint summary;
+          :Persist print objects;
+          :Return 200 (000000);
+        endif
+      endif
+
+    else (No)
+      :Resolve/Create default store;
+      :Resolve/Create default WorkShiftAction;
+      :processTransactionsWithDefaultStore(...);
+      :Return helper response;
+    endif
+
+  endif
+endif
+
+:finally (always)\nSave IntegrationHistory\n(request + response + status/resultdesc);
+stop
+@enduml

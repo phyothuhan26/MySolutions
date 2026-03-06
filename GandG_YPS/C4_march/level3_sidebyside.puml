@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title MQ Consumer Worker - Component Diagram
+
+LAYOUT_LEFT_RIGHT()
+skinparam shadowing false
+
+ContainerQueue_Ext(rmq, "RabbitMQ", "AMQP", "Events")
+ContainerDb_Ext(coreDb, "G&G Database", "MySQL/MSSQL", "Sale + QueueLog")
+
+Container_Boundary(worker, "MQ Consumer Worker (Spring Boot)") {
+
+Component(listener, "AMQP Listener", "Spring AMQP", "Consume events")
+Component(deserializer, "Message Deserializer", "Mapper", "Convert message")
+Component(idemGuard, "Idempotency Guard", "Service", "Prevent duplicates")
+Component(saleProcessor, "Sale Processor", "Domain Service", "Process sale")
+Component(saleRepo, "Sale Repository", "JPA/JDBC", "Save sale data")
+
+}
+
+' main flow
+Rel(rmq, listener, "Consume", "AMQP")
+Rel(listener, deserializer, "Parse")
+Rel(deserializer, idemGuard, "Validate")
+Rel(idemGuard, saleProcessor, "Process")
+Rel(saleProcessor, saleRepo, "Save")
+Rel(saleRepo, coreDb, "Persist")
+
+@enduml

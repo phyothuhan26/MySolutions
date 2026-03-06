@@ -1,0 +1,33 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+title Sale Processing - MQ Consumer Worker (Level 3)
+
+LAYOUT_LEFT_RIGHT()
+skinparam shadowing false
+
+ContainerQueue_Ext(rmq, "RabbitMQ", "AMQP", "SaleCreated/SaleUpdated events")
+ContainerDb_Ext(coreDb, "G&G Database", "MySQL/MSSQL", "Sale + QueueLog + Integration data")
+System_Ext(erp, "ERP", "AX / 365")
+
+Container_Boundary(worker, "MQ Consumer Worker (Spring Boot)") {
+  Component(listener, "AMQP Listener", "Spring AMQP Listener", "Consumes events from RabbitMQ")
+  Component(deserializer, "Message Deserializer", "Mapper", "Converts message to domain event")
+  Component(idemGuard, "Idempotency Guard", "Service", "Prevents double-processing by transactionId/censeq")
+  Component(saleProcessor, "Sale Processor", "Domain Service", "Applies business rules and builds Sale entity")
+  Component(saleRepo, "Sale Repository", "JPA/JDBC Repository", "Insert/Update Sale table")
+  Component(queueLogService, "Queue Log Service", "Service", "Updates mq_status, retry_count, last_error")
+  Component(erpSyncClient, "ERP Sync Client", "HTTP Client", "Calls ERP API if needed (or handled by scheduler)")
+}
+
+Rel(rmq, listener, "Deliver event", "AMQP")
+Rel(listener, deserializer, "Parse", "")
+Rel(deserializer, idemGuard, "Check", "")
+Rel(idemGuard, saleProcessor, "Process", "")
+Rel(saleProcessor, saleRepo, "Save sale", "JDBC")
+Rel(saleRepo, coreDb, "Persist", "JDBC")
+Rel(listener, queueLogService, "Update status", "")
+Rel(queueLogService, coreDb, "Persist QueueLog", "JDBC")
+Rel(erpSyncClient, erp, "Sync (optional)", "HTTPS/API")
+
+@enduml
+

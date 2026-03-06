@@ -20,3 +20,4 @@ Rel(ccnEservice, gngSystem, "Send data / integration", "HTTPS")
 
 Rel(gngSystem, erp, "Sync sales (~15 min)", "HTTPS/Integration")
 @enduml
+
