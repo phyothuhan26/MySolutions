@@ -1,0 +1,96 @@
+@startuml
+title Current Scheduler Sync Flow (sales-scheduler)
+
+actor "Spring Scheduler" as SS
+participant "DynamicSchedulerConfig" as DSC
+participant "SchedulerService" as SCH
+participant "WorkShiftActionService" as WSA
+participant "SaleTransactionService" as STS
+participant "CdsgEserviceHeaderService (AX)" as AXH
+participant "CdsgEserviceDetailService (AX)" as AXD
+participant "CdsgEserviceD365HeaderService" as D365H
+participant "CdsgEserviceD365DetailService" as D365D
+
+== Trigger ==
+SS -> DSC: nextExecutionTime()\n(delay from ApplicationSetting[BProcess])
+DSC -> SCH: schedulerProcess()
+
+== Phase 1: Shift Open ==
+SCH -> WSA: findByClosedAndTransactionStatus(OPEN, CREATED)
+WSA --> SCH: List<WorkShiftAction>
+
+loop each WorkShiftAction
+  SCH -> WSA: getDataAreaName(storeCode)
+  WSA --> SCH: dataAreaId
+
+  alt dataAreaId in [GGDC, GNGF] (D365)
+    SCH -> D365H: findByRecId(sessionId)
+    alt header not exists
+      SCH -> SCH: prepareCdsgEservieD365Header()
+      SCH -> D365H: save(header)
+    else exists
+    end
+  else AX
+    SCH -> AXH: findByRecId(sessionId)
+    alt header not exists
+      SCH -> SCH: prepareCdsgEservieHeader()
+      SCH -> AXH: save(header)
+    else exists
+    end
+  end
+
+  SCH -> WSA: save(workShiftAction.transactionStatus=PROCESSED)
+end
+
+== Phase 2: Sync Sale Transactions ==
+SCH -> STS: findByTransactionStatusAndIsSoldforAx(CREATED,"SUCCESS",["GGDC","GNGF"])
+STS --> SCH: List<SaleTransaction> (AX scope)
+
+loop each AX SaleTransaction
+  SCH -> AXD: findByRecId(tx.id)
+  alt detail not exists
+    SCH -> SCH: prepareCdsgEserviceDetail()
+    SCH -> AXD: save(detail)
+  else exists
+  end
+  SCH -> STS: save(tx.transactionStatus=PROCESSED)
+end
+
+SCH -> STS: findByTransactionStatusAndIsSoldforD365(CREATED,"SUCCESS",["GGDC","GNGF"])
+STS --> SCH: List<SaleTransaction> (D365 scope)
+
+loop each D365 SaleTransaction
+  SCH -> D365D: findByRecId(tx.id)
+  alt detail not exists
+    SCH -> SCH: prepareCdsgEserviceD365Detail()
+    SCH -> D365D: save(detail)
+  else exists
+  end
+  SCH -> STS: save(tx.transactionStatus=PROCESSED)
+end
+
+== Phase 3: Shift End ==
+SCH -> WSA: findByClosedAndTransactionStatus(CLOSE, PROCESSED)
+WSA --> SCH: List<WorkShiftAction>
+
+loop each WorkShiftAction
+  SCH -> STS: findTransactionsBySessionId(sessionId, CREATED)
+  STS --> SCH: activeTransactions
+
+  alt activeTransactions == 0
+    SCH -> WSA: getDataAreaName(storeCode)
+    alt dataAreaId in [GGDC, GNGF] (D365)
+      SCH -> D365H: findByRecId(sessionId)
+      SCH -> D365H: save(header.closed=CLOSE)
+    else AX
+      SCH -> AXH: findByRecId(sessionId)
+      SCH -> AXH: save(header.closed=CLOSE)
+    end
+    SCH -> WSA: save(workShiftAction.transactionStatus=ENDED)
+  else still pending CREATED tx
+    note right: Keep waiting for next scheduler run
+  end
+end
+
+@enduml
+
