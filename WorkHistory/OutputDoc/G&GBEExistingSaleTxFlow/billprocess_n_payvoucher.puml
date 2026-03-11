@@ -1,0 +1,77 @@
+@startuml
+title payVoucher() - New Queue Flow with Outbox Pattern
+
+actor Cashier
+participant "BillManagementProcess\n(payVoucher)" as Service
+participant "Core Services\n(Store/Bill/Product/User)" as CoreServices
+participant "Charging Rule Engine" as Charging
+database "Sale Transaction DB" as SaleDB
+participant "CapCon Gateway\n(External Voucher API)" as CapCon
+database "Outbox Event DB" as OutboxDB
+participant "Print Service" as PrintService
+participant "Outbox Publisher" as Publisher
+queue "RabbitMQ" as MQ
+participant "Voucher Post-Process Consumer" as Consumer
+database "Commission DB" as CommissionDB
+database "Integration History DB" as IntegrationDB
+database "Prefunding DB" as PrefundingDB
+
+Cashier -> Service: payVoucher(request)
+
+Service -> CoreServices: validate store / bill / product / user
+CoreServices --> Service: validated
+
+Service -> Charging: calculate sale transaction
+Charging --> Service: saleTransaction
+
+Service -> SaleDB: save saleTransaction (INIT)
+
+Service -> CapCon: call payVoucher API
+CapCon --> Service: voucher response\n(epin / serial / expiry)
+
+alt success
+    group Local DB Transaction
+        Service -> SaleDB: update saleTransaction (SUCCESS)
+        Service -> OutboxDB: save outbox_event (NEW,\nPAY_VOUCHER_SUCCESS)
+    end
+
+    Service -> PrintService: prepare voucher print data
+    PrintService --> Service: print ready
+
+    Service --> Cashier: return voucher + receipt
+
+else failure
+    Service -> SaleDB: update saleTransaction (FAIL)
+    Service --> Cashier: return error response
+end
+
+== Async Publish Flow ==
+
+Publisher -> OutboxDB: fetch NEW outbox_event
+OutboxDB --> Publisher: outbox events
+
+loop each outbox event
+    Publisher -> MQ: publish event
+    alt publish success
+        Publisher -> OutboxDB: update status = SENT
+    else publish fail
+        Publisher -> OutboxDB: update retry_count / status = RETRY
+    end
+end
+
+== Async Consumer Flow ==
+
+MQ -> Consumer: PAY_VOUCHER_SUCCESS event
+
+Consumer -> Consumer: idempotency check
+
+alt not processed
+    Consumer -> CommissionDB: save commission transaction
+    Consumer -> IntegrationDB: save integration history
+    Consumer -> PrefundingDB: update prefunding
+    Consumer -> Consumer: mark processed / ack
+else already processed
+    Consumer -> Consumer: skip duplicate / ack
+end
+
+@enduml

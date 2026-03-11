@@ -1,0 +1,46 @@
+@startuml
+title payVoucher() - Simplified Business Flow
+
+actor Cashier
+participant "BillManagementProcess\n(payVoucher)" as Service
+participant "Core Services\n(Store/Bill/Product/User)" as CoreServices
+participant "Charging Rule Engine" as Charging
+database "Sale Transaction DB" as SaleDB
+participant "CapCon Gateway\n(External Voucher API)" as CapCon
+participant "Print Service" as PrintService
+database "Integration History DB" as IntegrationDB
+database "Commission Service" as Commission
+
+Cashier -> Service: payVoucher(request)
+
+Service -> CoreServices: validate store / bill / product
+CoreServices --> Service: validated
+
+Service -> Charging: calculate sale transaction
+Charging --> Service: saleTransaction
+
+Service -> SaleDB: save saleTransaction (INIT)
+
+Service -> CapCon: call payVoucher API
+CapCon --> Service: voucher response\n(epin / serial / expiry)
+
+alt success
+    Service -> SaleDB: update saleTransaction (SUCCESS)
+
+    Service -> PrintService: prepare and persist print data
+
+    Service -> IntegrationDB: save integration history
+
+    Service -> Commission: save commission transaction
+
+    Service --> Cashier: return voucher + receipt
+
+else failure
+    Service -> SaleDB: update saleTransaction (FAIL)
+
+    Service -> IntegrationDB: save failure history
+
+    Service --> Cashier: return error response
+end
+
+@enduml

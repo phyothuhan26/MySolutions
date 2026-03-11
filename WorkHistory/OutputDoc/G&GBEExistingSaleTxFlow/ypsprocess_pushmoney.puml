@@ -1,0 +1,168 @@
+@startuml
+title YPSProcess.pushMoney(String req)
+
+actor Caller
+participant "YPSProcess" as YPS
+participant "ObjectMapper" as Mapper
+participant "StoreRepository" as StoreRepo
+participant "BillService" as BillService
+participant "ProductService" as ProductService
+participant "WorkShiftActionService" as WorkShiftActionService
+participant "UserService" as UserService
+participant "ChargingRuleService" as ChargingRuleService
+participant "CalculateChargingUtil" as CalcUtil
+participant "SaleTransactionService" as SaleTxService
+participant "CommissionTransactionService\n(via proceedInsertIntoCommissionTransaction)" as CommissionService
+participant "MainStoreService" as MainStoreService
+participant "RePrintService / PrintSummaryService\n(via printingPersistProcess)" as PrintPersist
+participant "StoreService" as StoreService
+participant "TownshipService" as TownshipService
+participant "OrganizationService" as OrganizationService
+participant "ZoneService" as ZoneService
+participant "CapConGatewayProcess" as CapConGateway
+participant "IntegrationHistoryService" as IntegrationHistoryService
+
+Caller -> YPS: pushMoney(req)
+activate YPS
+
+YPS -> Mapper: readValue(jsonrequest, YPSData.class)
+Mapper --> YPS: request
+
+alt signature is empty
+    YPS -> YPS: sha256Hashing(...)
+    YPS -> YPS: resultObj("000001","fail, Signature is empty", sign)
+    YPS --> Caller: ResponseEntity(BAD_REQUEST)
+else required parameter missing
+    YPS -> YPS: sha256Hashing(...)
+    YPS -> YPS: resultObj("000001","fail, Required parameter is not provided", sign)
+    YPS --> Caller: ResponseEntity(BAD_REQUEST)
+else signature mismatch
+    YPS -> YPS: validateSignature(request, request.signature)
+    YPS --> YPS: false
+    YPS -> YPS: sha256Hashing(...)
+    YPS -> YPS: resultObj("000001","fail, Signature mismatch", sign)
+    YPS --> Caller: ResponseEntity(BAD_REQUEST)
+else valid request
+    YPS -> StoreRepo: findActiveStoreByCode(false, true, storeCode)
+    StoreRepo --> YPS: store
+
+    YPS -> BillService: findByIdentifier(ypsBillerId, "ACTIVE")
+    BillService --> YPS: bill
+
+    alt bill not found
+        YPS --> Caller: ResponseEntity(NOT_FOUND)
+    else bill exists
+        YPS -> ProductService: findByProductId(request.transactionType)
+        ProductService --> YPS: product
+
+        alt product not found
+            YPS --> Caller: ResponseEntity(NOT_FOUND)
+        else product exists
+
+            alt store exists
+                YPS -> WorkShiftActionService: findByStoreCodeAndIsActive(storeCode, true)
+                WorkShiftActionService --> YPS: workShiftAction
+
+                alt no active workShiftAction
+                    YPS -> WorkShiftActionService: findByOrderByStoreCodeAndIsActiveDesc(storeCode, false)
+                    WorkShiftActionService --> YPS: workShiftAction
+                end
+
+                YPS -> UserService: findUserByLoginId(cashierId, true, false)
+                UserService --> YPS: user
+
+                YPS -> ChargingRuleService: findByProductId(product.id, true)
+                ChargingRuleService --> YPS: chargingRules
+
+                alt no charging rule
+                    YPS --> Caller: ResponseEntity(INTERNAL_SERVER_ERROR)
+                else charging rule exists
+                    YPS -> CalcUtil: processChargingRule(chargingRules, value)
+                    CalcUtil --> YPS: saleTransaction
+
+                    alt saleTransaction is null
+                        YPS --> Caller: ResponseEntity(INTERNAL_SERVER_ERROR)
+                    else saleTransaction ok
+                        YPS -> YPS: populate saleTransaction fields
+                        YPS -> YPS: Utils.checkString(saleTransaction.status)
+
+                        alt invalid saleTransaction status
+                            YPS --> Caller: ResponseEntity(INTERNAL_SERVER_ERROR)
+                        else status ok
+                            YPS -> CalcUtil: preapareSaleTransaction(saleTransaction, product, store, workShiftAction)
+                            CalcUtil --> YPS: saleTransaction
+
+                            YPS -> SaleTxService: save(saleTransaction)
+                            SaleTxService --> YPS: savedSaleTransaction
+
+                            alt save failed
+                                YPS --> Caller: ResponseEntity(INTERNAL_SERVER_ERROR)
+                            else save success
+                                YPS -> YPS: sha256Hashing(savedSaleTransaction.id, reqinstssn)
+                                YPS -> YPS: resultObj("000000","success", sign)
+
+                                YPS -> CommissionService: saveAll(...)
+                                note right of CommissionService
+                                  via proceedInsertIntoCommissionTransaction(...)
+                                end note
+
+                                YPS -> YPS: clone SaleTransactionDto
+                                YPS -> YPS: prepareToAddDisplayNamesInSaleTranDtoForPrintStuff(...)
+                                YPS -> MainStoreService: findMainStoreByStoreCode(storeCode)
+                                MainStoreService --> YPS: mainStore
+                                YPS -> YPS: prepareRePrint(...)
+                                YPS -> YPS: preparePrintSummary(...)
+                                YPS -> PrintPersist: printingPersistProcess(rePrint, printSummary)
+                                PrintPersist --> YPS: done
+
+                                YPS --> Caller: ResponseEntity(OK)
+                            end
+                        end
+                    end
+                end
+
+            else store does not exist
+                YPS -> StoreService: findActiveStoreByCode(false, true, defaultStoreCode)
+                StoreService --> YPS: dstore
+
+                alt default store not found
+                    YPS -> TownshipService: findTownships(false)
+                    TownshipService --> YPS: township
+                    YPS -> MainStoreService: findMainStores(false)
+                    MainStoreService --> YPS: mainStore
+                    YPS -> OrganizationService: findByName(gngOrganizationName)
+                    OrganizationService --> YPS: organization
+                    YPS -> ZoneService: findZones(false)
+                    ZoneService --> YPS: zone
+                    YPS -> StoreService: save(defaultStore)
+                    StoreService --> YPS: dstore
+                end
+
+                YPS -> WorkShiftActionService: findByStoreCodeAndIsActive(defaultStoreCode, true)
+                WorkShiftActionService --> YPS: workShiftAction
+
+                alt default workShiftAction not found
+                    YPS -> WorkShiftActionService: save(action)
+                    WorkShiftActionService --> YPS: workShiftAction
+                end
+
+                YPS -> YPS: processTransactionsWithDefaultStore(request, product, bill, dstore, workShiftAction)
+                YPS --> Caller: ResponseEntity
+            end
+        end
+    end
+end
+
+group catch Exception
+    YPS -> YPS: sha256Hashing(...)
+    YPS -> YPS: resultObj("000001","fail, " + e.getMessage(), sign)
+end
+
+group finally
+    YPS -> CapConGateway: prepareIntegrationHistory("", jsonrequest, "YPS", responseBody, currentDate)
+    CapConGateway --> YPS: integrationHistory
+    YPS -> IntegrationHistoryService: save(integrationHistory)
+end
+
+deactivate YPS
+@enduml

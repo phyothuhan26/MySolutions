@@ -1,0 +1,60 @@
+@startuml
+title Y Repo + S Repo with RabbitMQ / Outbox for YPS pushMoney
+
+actor "YPS External Service" as YPSCaller
+participant "Y Repo\n(pushMoney API)" as YRepo
+participant "Validation & Rule Check\n(signature / bill / product / store / charging)" as Validator
+database "Y Repo DB\n(request_log / outbox_event / draft_sale)" as YDB
+participant "Print Service" as PrintSvc
+participant "Outbox Publisher" as Publisher
+queue "RabbitMQ" as MQ
+participant "S Repo\n(Consumer Service)" as SRepo
+database "S Repo DB\n(sale_transaction / commission / print tables)" as SDB
+
+YPSCaller -> YRepo: pushMoney(req)
+activate YRepo
+
+YRepo -> Validator: validate signature\ncheck bill/product/store\nload charging rule\nprepare draft sale
+Validator --> YRepo: validated draft sale
+
+group Local transaction in Y Repo
+    YRepo -> YDB: save request_log / draft_sale
+    YRepo -> YDB: save outbox_event(status=NEW)
+end
+
+YRepo -> PrintSvc: print voucher immediately
+PrintSvc --> YRepo: print success
+
+YRepo --> YPSCaller: success response
+deactivate YRepo
+
+== Async publish ==
+Publisher -> YDB: fetch outbox_event(status=NEW)
+YDB --> Publisher: events
+
+loop each event
+    Publisher -> MQ: publish sale event
+    alt published
+        Publisher -> YDB: update outbox_event(status=SENT)
+    else failed
+        Publisher -> YDB: update retry_count/status=RETRY
+    end
+end
+
+== Async consume ==
+MQ -> SRepo: sale event
+activate SRepo
+
+SRepo -> SRepo: idempotency check\n(transactionSerialNumber / infoSerialNumber)
+
+alt not processed
+    SRepo -> SDB: save/finalize sale_transaction
+    SRepo -> SDB: save commission_transaction
+    SRepo -> SDB: save print_summary / reprint / audit log
+    SRepo --> MQ: ACK
+else duplicate
+    SRepo --> MQ: ACK and skip
+end
+
+deactivate SRepo
+@enduml

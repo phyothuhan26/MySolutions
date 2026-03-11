@@ -1,0 +1,185 @@
+@startuml
+title BillManagementProcess.payVoucher(String request) - Existing Flow
+
+actor Caller
+participant "BillManagementProcess" as BMP
+participant "StoreService" as StoreService
+participant "BillService" as BillService
+participant "ProductService" as ProductService
+participant "UserService" as UserService
+participant "WorkShiftActionService" as WorkShiftActionService
+participant "ChargingRuleService" as ChargingRuleService
+participant "CalculateChargingUtil" as CalcUtil
+participant "SaleTransactionService" as SaleTxService
+participant "BillerMapper" as BillerMapper
+participant "CapConGatewayProcess" as CapCon
+participant "OrganizationService" as OrgService
+participant "MainStoreService" as MainStoreService
+participant "SalesTransactionMapper" as SalesMapper
+participant "RePrintService / PrintSummaryService" as PrintPersist
+participant "IntegrationHistoryService" as IntegrationHistoryService
+participant "CommissionTransactionService\n(via proceedInsertIntoCommissionTransaction)" as CommissionService
+
+Caller -> BMP: payVoucher(request)
+activate BMP
+
+BMP -> BMP: parse request JSON\nget cashierId from SecurityContext
+
+BMP -> StoreService: findActiveStore(false, true, storeId)
+StoreService --> BMP: store
+alt store not found
+    BMP --> Caller: 404 STORE_NOT_FOUND
+    deactivate BMP
+else store found
+end
+
+BMP -> BillService: findByIdentifierByName(biller_identifier, "ACTIVE", biller_name)
+BillService --> BMP: bill
+alt bill not found
+    BMP --> Caller: 404 BILL_NOT_FOUND
+    deactivate BMP
+else bill found
+end
+
+BMP -> ProductService: findByProductId(productId)
+ProductService --> BMP: product
+alt product not found
+    BMP --> Caller: 404 PRODUCT_NOT_FOUND
+    deactivate BMP
+else product found
+end
+
+group Prepare sale transaction
+    BMP -> UserService: findUserByLoginId(cashierId, true, false)
+    UserService --> BMP: user
+
+    BMP -> WorkShiftActionService: findByLoginIdAndEndDate(cashierId)
+    WorkShiftActionService --> BMP: workShiftAction
+
+    BMP -> BMP: parse request_param.value
+
+    BMP -> ChargingRuleService: findByProductId(product.id, true)
+    ChargingRuleService --> BMP: chargingRules
+
+    BMP -> CalcUtil: processChargingRule(chargingRules, value)
+    CalcUtil --> BMP: saleTransaction
+
+    alt saleTransaction is null
+        BMP --> Caller: 500 saleTransaction object is null
+        deactivate BMP
+    end
+
+    BMP -> BMP: set cashier / employee / session\nmerchant info / transactionType
+
+    alt saleTransaction.status has error
+        BMP --> Caller: 500 internal server error
+        deactivate BMP
+    end
+
+    BMP -> CalcUtil: preapareSaleTransaction(saleTransaction, product, store, workShiftAction)
+    CalcUtil --> BMP: prepared saleTransaction
+end
+
+group Save initial sale transaction
+    BMP -> BMP: set isSold = INIT
+    BMP -> SaleTxService: save(saleTransaction)
+    SaleTxService --> BMP: saved saleTransaction
+end
+
+BMP -> BillerMapper: convertToPayVoucherRequest(requestJson, saleTransaction.id)
+BillerMapper --> BMP: payVoucherRequestJson
+
+group Call external CapCon API
+    BMP -> CapCon: payVouchers(payVoucherRequestJson)
+    CapCon --> BMP: response
+
+    BMP -> BMP: parse response body to JSONObject
+    BMP -> CapCon: prepareIntegrationHistory(baseUrl,\npayVoucherRequestJson, PAY_VOUCHER,\nresponseObject, currentDate)
+    CapCon --> BMP: integrationHistory
+end
+
+alt CapCon response == HTTP 200 OK
+
+    BMP -> BMP: read transaction_refno
+    BMP -> BMP: parse response_param array
+
+    alt product.isSendSms == true
+        BMP -> BMP: extract epin / expiry / SerialNumber
+        BMP -> BMP: encrypt epin and set PinNoRemark
+    else product.isSendSms == false
+        BMP -> BMP: set PinNoRemark from phone_number
+    end
+
+    BMP -> BMP: clone saleTransactionDto\nset epin / expiry / serial
+    alt saleTransaction.organizationId != null
+        BMP -> OrgService: findById(organizationId)
+        OrgService --> BMP: organization
+        BMP -> BMP: set organizationName
+    end
+
+    group Mark sale success
+        BMP -> BMP: set isSold = SUCCESS
+        BMP -> SaleTxService: update(saleTransaction)
+        SaleTxService --> BMP: updatedSaleTransaction
+
+        alt updatedSaleTransaction is null
+            BMP --> Caller: 500 Error in persisting Sale Transaction
+            deactivate BMP
+        end
+    end
+
+    BMP -> BMP: set receiptNo / instruction
+    BMP -> BMP: prepareToAddDisplayNamesInSaleTranDtoForPrintStuff(...)
+
+    BMP -> MainStoreService: findMainStoreByStoreCode(storeCode)
+    MainStoreService --> BMP: mainStore
+
+    BMP -> SalesMapper: convertPrintHeaderJson(saleTransactionDto,\nresponse.body, mainStore.remark, mainStore.storeOpenTime)
+    SalesMapper --> BMP: printObject
+
+    BMP -> SalesMapper: convertVoucherFinalArray(saleTransactionDto)
+    SalesMapper --> BMP: transactionArray
+
+    BMP -> BMP: printObject.add("transaction", transactionArray)
+    BMP -> BMP: prepareRePrint(printObject, product, updatedSaleTransaction)
+    BMP -> BMP: preparePrintSummary(product, updatedSaleTransaction)
+
+    BMP -> PrintPersist: printingPersistProcess(rePrint, printSummary)
+    PrintPersist --> BMP: printPersistResponse
+
+    BMP -> BMP: integrationHistory.responseMessage = status_message
+    BMP -> BMP: integrationHistory.status = SUCCESS
+
+    BMP -> IntegrationHistoryService: save(integrationHistory)
+
+    BMP -> CommissionService: save commission transactions
+    note right of CommissionService
+      via proceedInsertIntoCommissionTransaction(updatedSaleTransaction)
+    end note
+
+    alt saleTransaction.id/productId/sellingPrice valid
+        BMP -> SaleTxService: addPrefunding(id, productId, netSale, "SUCCESS")
+    end
+
+    alt printPersistResponse != null
+        BMP --> Caller: printPersistResponse
+    else
+        BMP --> Caller: 200 OK with printObject response
+    end
+
+else CapCon response != HTTP 200
+    group Mark sale fail
+        BMP -> BMP: set isSold = FAIL
+        BMP -> SaleTxService: update(saleTransaction)
+        SaleTxService --> BMP: failed saleTransaction
+    end
+
+    BMP -> BMP: integrationHistory.status = FAIL
+    BMP -> BMP: integrationHistory.responseMessage = internal_message/message/API Communication Error
+    BMP -> IntegrationHistoryService: save(integrationHistory)
+
+    BMP --> Caller: 404 error response from AdminMapper.convertToResponseError(...)
+end
+
+deactivate BMP
+@enduml
