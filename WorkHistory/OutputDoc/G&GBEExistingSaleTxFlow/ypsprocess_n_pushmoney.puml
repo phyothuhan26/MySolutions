@@ -1,0 +1,60 @@
+@startuml
+title New Queue Flow with Outbox Pattern
+
+actor Cashier
+participant "YPS API / PushMoney Service" as API
+database "Sale Transaction Table" as SaleDB
+database "Outbox Event Table" as OutboxDB
+participant "Print Service" as PrintService
+participant "Outbox Publisher Scheduler" as Publisher
+queue "RabbitMQ" as MQ
+participant "Queue Consumer" as Consumer
+database "Commission Table" as CommissionDB
+
+Cashier -> API: pushMoney(request)
+activate API
+
+API -> API: validate request\nload bill/product/charging rule\ncalculate transaction
+
+group DB Transaction
+    API -> SaleDB: insert sale_transaction(status=PENDING)
+    API -> OutboxDB: insert outbox_event(status=NEW,\neventType=SALE_CREATED,payload)
+end
+
+API -> PrintService: print voucher
+PrintService --> API: print success
+
+API --> Cashier: response success / accepted
+deactivate API
+
+== Async Publish Flow ==
+
+Publisher -> OutboxDB: fetch NEW outbox_event
+OutboxDB --> Publisher: outbox events
+
+loop for each outbox event
+    Publisher -> MQ: publish event
+    alt publish success
+        Publisher -> OutboxDB: update outbox_event(status=SENT,\npublishedAt=now)
+    else publish fail
+        Publisher -> OutboxDB: update retry_count,\nlast_error,status=FAILED/RETRY
+    end
+end
+
+== Async Consumer Flow ==
+
+MQ -> Consumer: SALE_CREATED event
+activate Consumer
+
+Consumer -> Consumer: idempotency check
+
+alt not processed yet
+    Consumer -> SaleDB: update sale_transaction(status=SUCCESS)
+    Consumer -> CommissionDB: insert commission_transaction
+    Consumer -> Consumer: ack message
+else already processed
+    Consumer -> Consumer: skip duplicate and ack
+end
+
+deactivate Consumer
+@enduml

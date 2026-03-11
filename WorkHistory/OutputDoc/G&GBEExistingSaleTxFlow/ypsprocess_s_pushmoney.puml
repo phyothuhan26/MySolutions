@@ -1,0 +1,27 @@
+@startuml
+title YPS PushMoney - Y Repo / S Repo Split
+
+actor Caller
+participant "Y Repo" as Y
+database "Y Repo DB" as YDB
+participant "Printer" as Printer
+participant "Publisher" as Pub
+queue "RabbitMQ" as MQ
+participant "S Repo" as S
+database "S Repo DB" as SDB
+
+Caller -> Y: pushMoney(request)
+Y -> Y: validate + prepare draft sale
+Y -> YDB: save draft + outbox
+Y -> Printer: print voucher
+Y --> Caller: return success
+
+Pub -> YDB: read NEW outbox
+Pub -> MQ: publish event
+Pub -> YDB: mark SENT
+
+MQ -> S: consume event
+S -> SDB: save sale_transaction
+S -> SDB: save commission
+S -> SDB: save print/audit records
+@enduml
