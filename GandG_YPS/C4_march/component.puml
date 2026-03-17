@@ -1,0 +1,54 @@
+@startuml
+title G&G Revamp - YPS Service Component Diagram
+left to right direction
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam defaultFontName Arial
+
+actor "G&G / Capital Sale Staff" as Staff
+rectangle "POS Device\n<<external>>\nSunmi POS / YPS POS" as POS
+rectangle "YPS Service\n<<external>>\nProcess YPS Top Up" as ExtYPS
+rectangle "YPS File Server\n<<external>>" as FileServer
+rectangle "G&G Backend\n<<external>>\nAccept for email processing" as Backend
+rectangle "ERP System DB (AX/D365)\n<<external>>" as ERP
+
+package "YPS Service Container" {
+
+  component "Push Money API\n<<component>>\nAccept & Process YPS\nTransaction Data" as PushMoney
+  component "Sale Publish Component\n<<component>>\nValidate bill, product, store\nand prepare sale payload" as Publish
+  component "CSV Import Component\n<<component>>\nRead CSV from file server\nand import for sale process" as Import
+  component "Scheduler Component\n<<component>>\nTrigger file import,\nretry, and shift-close flow" as Scheduler
+  component "Notification Component\n<<component>>\nSend import fail mail\nand fail transaction records" as Email
+  component "Shift Validation Component\n<<component>>\nCheck sale sync status\nand close shift after import" as ShiftCheck
+
+  queue "RabbitMQ / Kafka\n<<messaging>>\nYPS raw sale queue" as MQ
+  database "Redis Cache\n<<cache>>\nBill / Product / Store" as Redis
+  database "G&G Database\n<<database>>\nReference Data:\nBill, Product, Store" as GGDB
+  database "YPS Database\n<<database>>\nImportRecord, ImportSession,\nFileConfig, Outbox" as YPSDB
+}
+
+Staff --> POS : operate
+POS --> ExtYPS : send transaction [HTTPS]
+POS --> PushMoney : send bill data [HTTPS/API]
+
+PushMoney --> Publish : send raw transaction
+Publish --> Redis : read cache
+Publish --> GGDB : fetch reference data [JDBC]
+Publish --> MQ : publish sale data [AMQP]
+Publish --> YPSDB : save YPS transaction / outbox [JDBC]
+
+Scheduler --> Import : trigger file import (1:30 AM)
+Import --> FileServer : fetch CSV file
+Import --> YPSDB : save import record/session [JDBC]
+Import --> Publish : push sale data
+Import --> Email : send fail import data
+
+Scheduler --> ShiftCheck : trigger end-of-shift validation
+ShiftCheck --> YPSDB : find import record / update shift status
+ShiftCheck --> GGDB : check sale sync status
+
+Email --> Backend : send fail data [REST]
+
+MQ --> ERP : consume / sync sale data
+
+@enduml

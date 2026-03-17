@@ -1,0 +1,96 @@
+@startuml
+title G&G Revamp - Deployment Diagram
+
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam rectangle {
+  RoundCorner 12
+}
+skinparam node {
+  RoundCorner 12
+}
+skinparam database {
+  RoundCorner 12
+}
+skinparam componentStyle rectangle
+
+actor "G&G / Capital Sale Staff" as Staff
+node "POS Device\n(Sunmi POS / YPS POS)" as POS
+cloud "External YPS Service" as YPS_EXT
+cloud "CCN EService\nTop Up / Subscription / Meter Bill" as CCN
+cloud "ERP System\n(AX / D365)" as ERP
+
+frame "Alibaba Cloud" {
+
+  node "WSO2 API Gateway" as WSO2
+
+  node "Kubernetes Cluster" as K8S {
+
+    node "Ingress / Service" as INGRESS
+
+    node "YPS Service Pods" as YPS_POD {
+      artifact "YPS Service\nAccept and process\nYPS transactions" as YPS_APP
+    }
+
+    node "Sale Service Pods" as SALE_POD {
+      artifact "Sale Service\nProcess sale & printing" as SALE_APP
+    }
+
+    node "G&G Backend Pods" as BACKEND_POD {
+      artifact "G&G Backend\nProcess G&G / Capital\ntransactions" as BACKEND_APP
+    }
+
+    node "Scheduler Pod\n(single replica)" as SCHED_POD {
+      artifact "Sale Scheduler\nSync DB to DB transaction" as SCHED_APP
+    }
+  }
+
+  frame "Data / Integration Layer" {
+    database "YPS Database" as YPS_DB
+    database "G&G Database" as GNG_DB
+    database "Archive Database" as ARC_DB
+
+    queue "Kafka / RabbitMQ" as MQ
+    collections "Redis Cache\n(bill, product, store)" as REDIS
+  }
+
+  node "Frontend Hosting" as FE {
+    artifact "React Frontend\n(OSS + CDN or Nginx)" as REACT
+  }
+}
+
+' User / client access
+Staff --> POS : operate
+Staff --> REACT : use frontend
+POS --> WSO2 : HTTPS/API
+REACT --> WSO2 : HTTPS/API
+
+' Gateway to cluster
+WSO2 --> INGRESS : route API request
+
+' Ingress to services
+INGRESS --> YPS_APP : YPS API
+INGRESS --> BACKEND_APP : G&G / Capital API
+INGRESS --> SALE_APP : sale API
+
+' External integrations
+POS --> YPS_EXT : send transaction\n(HTTPS)
+WSO2 --> CCN : invoke services\n(HTTPS/API)
+SCHED_APP --> ERP : sync transactions
+
+' App dependencies
+YPS_APP --> YPS_DB : store YPS data\n(JDBC)
+YPS_APP --> MQ : publish sale data\n(AMQP)
+
+SALE_APP --> MQ : consume sale data\n(AMQP)
+SALE_APP --> GNG_DB : store sale transaction\n(JDBC)
+
+BACKEND_APP --> REDIS : read/write cache
+SALE_APP --> REDIS : read cache
+YPS_APP --> REDIS : read cache
+
+SCHED_APP --> GNG_DB : read sync data\n(JDBC)
+SCHED_APP --> ARC_DB : archive old data\n(JDBC)
+
+@enduml

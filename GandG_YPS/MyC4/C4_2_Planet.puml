@@ -1,0 +1,71 @@
+@startuml
+title G&G Revamp - C4 Level 2 (Container Diagram)
+
+!define C4P https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master
+!includeurl C4P/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+
+Person(staff, "G&G / Capital Sale Staff", "Operate POS and EService")
+
+System_Ext(pos, "POS Device", "Sunmi POS / YPS POS")
+System_Ext(yps_ext, "YPS External Service", "Process YPS Top Up")
+System_Ext(ccn, "CCN EService", "Top Up, Subscription, Meter Bill")
+System_Ext(erp, "ERP System (AX / D365)", "Store sale transactions")
+
+System_Boundary(gng, "G&G Revamp System") {
+
+    Container(frontend, "Frontend (React)", "OSS + CDN or Nginx", "UI for bill, top up, subscription")
+
+    Container(api, "WSO2 API Gateway", "WSO2", "API management, routing, security")
+
+    Container(yps, "YPS Service", "Java / Spring Boot", "Accept and process YPS transactions")
+
+    Container(sale, "Sale Service", "Java / Spring Boot", "Process sale and printing")
+
+    Container(backend, "G&G Backend API", "Java / Spring Boot", "Orchestrate G&G and Capital transactions")
+
+    Container(scheduler, "Sale Scheduler", "Java / Spring Boot", "Sync DB and archive transactions")
+
+    ContainerDb(ypsdb, "YPS Database", "MySQL", "Store YPS transactions")
+
+    ContainerDb(gngdb, "G&G Database", "MySQL", "Store sale transactions")
+
+    ContainerDb(archivedb, "Archive Database", "MySQL", "Store historical data")
+
+    Container(redis, "Redis Cache", "Redis", "Cache bill, product, store")
+
+    Container(mq, "Message Queue", "Kafka / RabbitMQ", "Async communication")
+}
+
+' Relationships (keep clean and simple)
+
+Rel(staff, pos, "Uses")
+Rel(staff, frontend, "Uses")
+
+Rel(frontend, api, "Calls API", "HTTPS")
+Rel(pos, api, "Calls API", "HTTPS")
+
+Rel(api, yps, "Routes request")
+Rel(api, backend, "Routes request")
+Rel(api, sale, "Routes request")
+
+Rel(pos, yps_ext, "Send transaction", "HTTPS")
+
+Rel(api, ccn, "Invoke external service", "HTTPS")
+
+Rel(scheduler, erp, "Sync transactions")
+
+Rel(yps, ypsdb, "Writes YPS data")
+Rel(sale, gngdb, "Writes sale data")
+Rel(scheduler, gngdb, "Reads data")
+Rel(scheduler, archivedb, "Archives data")
+
+Rel(yps, mq, "Publishes events")
+Rel(sale, mq, "Consumes events")
+
+Rel(yps, redis, "Reads cache")
+Rel(sale, redis, "Reads cache")
+Rel(backend, redis, "Reads/Writes cache")
+
+@enduml

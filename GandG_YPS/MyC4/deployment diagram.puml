@@ -1,0 +1,51 @@
+@startuml
+title G&G Revamp - Deployment
+
+skinparam shadowing false
+skinparam roundcorner 12
+skinparam defaultTextAlignment center
+skinparam packageStyle rectangle
+
+cloud "Alibaba Cloud (VPC)" {
+
+    node "Frontend Hosting\nReact App (Web)\n(OSS + CDN / Nginx VM)" as FE
+
+    node "WSO2 API Gateway\n(Entry Point)" as WSO2
+
+    node "ACK Cluster - G&G Revamp" as K8S {
+        node "Ingress Controller" as INGRESS
+
+        node "Application Services" as APPS {
+            node "G&G Backend" as BE
+            node "YPS Service" as YPS
+            node "Sale Service" as SALE
+            node "Sale Scheduler" as SCH
+        }
+    }
+
+    node "ACK Cluster - Shared/Internal Services" {
+        node "CCN eService\n(Internal system\nOut of Revamp Scope)" as CCN
+    }
+
+    node "Managed Services" {
+        database "RDS MySQL\n(G&G, YPS, Archive)" as DB
+        node "Redis Cache" as REDIS
+        queue "Kafka / RabbitMQ" as MQ
+    }
+}
+
+rectangle "External YPS Service" as YPS_EXT
+
+FE --> WSO2 : HTTPS
+WSO2 --> INGRESS : Route API calls
+INGRESS --> APPS
+
+APPS --> DB : persistence
+BE --> REDIS : cache lookup
+SALE --> MQ : publish/consume
+SCH --> DB : scheduled batch/update
+
+WSO2 --> CCN : internal API
+WSO2 --> YPS_EXT : external API
+
+@enduml
