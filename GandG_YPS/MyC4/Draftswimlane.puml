@@ -1,0 +1,44 @@
+@startuml
+title YPS Publish to Queue and Sale Service Consume & Print
+
+|YPS / External Caller|
+start
+:Send pushMoney request;
+
+|YPS Entry Service|
+:Receive request;
+:Validate signature and required fields;
+:Validate bill / product / store / charging rule;
+:Prepare sale payload;
+:Save request log / outbox (optional);
+:Publish sale message to RabbitMQ;
+
+|RabbitMQ|
+:Queue sale message;
+
+|Sale Service|
+:Consume sale message;
+:Check idempotency / duplicate request;
+
+if (Duplicate?) then (Yes)
+  :Skip processing;
+  stop
+else (No)
+  :Prepare sale transaction;
+endif
+
+|Database|
+:Save sale_transaction;
+:Save commission_transaction;
+:Save print_summary / audit log;
+
+|Sale Service|
+:Prepare print payload;
+
+|Printer / Print Module|
+:Print voucher;
+
+|Sale Service|
+:Update processing status = SUCCESS;
+stop
+@enduml

@@ -1,0 +1,26 @@
+@startuml
+title Draft Swimlane - YPS External Service / YPS Service / Sale Service
+
+|YPS External Service|
+start
+:Send pushMoney request;
+
+|YPS Service|
+:Receive request;
+:Validate signature;
+:Validate bill / product / store / charging rule;
+:Prepare draft sale data;
+:Publish sale event;
+:Return response;
+
+|Sale Service|
+:Consume sale event;
+:Check idempotency;
+:Save sale transaction;
+:Save commission;
+:Prepare print data;
+:Print voucher;
+:Update transaction status;
+
+stop
+@enduml

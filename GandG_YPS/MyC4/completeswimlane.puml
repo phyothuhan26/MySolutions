@@ -1,0 +1,200 @@
+@startuml
+title YPS PushMoney Revamp - Complete Swimlane
+
+|YPS External Service|
+start
+:Send pushMoney request;
+
+|YPS Service|
+:Receive request;
+:Parse JSON request;
+
+if (Request parse OK?) then (Yes)
+else (No)
+  :Build error response;
+  :Save integration history (FAIL);
+  |YPS External Service|
+  :Receive error response;
+  stop
+endif
+
+:Validate required fields;
+if (Required fields valid?) then (Yes)
+else (No)
+  :Build validation error response;
+  :Save integration history (FAIL);
+  |YPS External Service|
+  :Receive validation error;
+  stop
+endif
+
+:Validate signature;
+if (Signature valid?) then (Yes)
+else (No)
+  :Build signature mismatch response;
+  :Save integration history (FAIL);
+  |YPS External Service|
+  :Receive signature error;
+  stop
+endif
+
+:Check duplicate request\n(by transactionSerialNumber / informationSerialNumber);
+if (Duplicate request?) then (Yes)
+  :Return duplicate / previously processed response;
+  :Save integration history (DUPLICATE);
+  |YPS External Service|
+  :Receive duplicate response;
+  stop
+else (No)
+endif
+
+:Validate bill;
+if (Bill exists?) then (Yes)
+else (No)
+  :Return bill not found;
+  :Save integration history (FAIL);
+  |YPS External Service|
+  :Receive error response;
+  stop
+endif
+
+:Validate product;
+if (Product exists?) then (Yes)
+else (No)
+  :Return product not found;
+  :Save integration history (FAIL);
+  |YPS External Service|
+  :Receive error response;
+  stop
+endif
+
+:Find store by network/store code;
+if (Store found?) then (Yes)
+  :Use requested store;
+else (No)
+  :Find default store;
+  if (Default store exists?) then (Yes)
+    :Use default store;
+  else (No)
+    :Create default store;
+    :Create default workshift if needed;
+  endif
+endif
+
+:Find workshift / cashier context;
+:Load charging rules;
+
+if (Charging rule exists?) then (Yes)
+else (No)
+  :Return charging rule not found;
+  :Save integration history (FAIL);
+  |YPS External Service|
+  :Receive error response;
+  stop
+endif
+
+:Calculate draft sale data;
+if (Draft sale created?) then (Yes)
+else (No)
+  :Return calculation error;
+  :Save integration history (FAIL);
+  |YPS External Service|
+  :Receive error response;
+  stop
+endif
+
+:Build sale event payload;
+:Save request log / draft sale;
+:Save outbox event (NEW);
+:Save integration history (ACCEPTED);
+
+if (Outbox saved?) then (Yes)
+  :Return accepted/success response;
+else (No)
+  :Return system error;
+  :Save integration history (FAIL);
+  |YPS External Service|
+  :Receive system error;
+  stop
+endif
+
+|YPS External Service|
+:Receive accepted/success response;
+
+|Outbox Publisher|
+:Read NEW outbox events;
+
+if (Outbox event found?) then (Yes)
+  :Publish event to RabbitMQ;
+  if (Publish success?) then (Yes)
+    :Update outbox status = SENT;
+  else (No)
+    :Update outbox status = RETRY;
+    :Increase retry count;
+    if (Retry count exceeded?) then (Yes)
+      :Mark outbox as FAILED;
+      :Raise support alert / reconciliation;
+      stop
+    else (No)
+      :Wait next retry schedule;
+      stop
+    endif
+  endif
+else (No)
+  stop
+endif
+
+|RabbitMQ|
+:Store message in queue;
+
+|Sale Service|
+:Consume sale event;
+:Check idempotency / duplicate message;
+
+if (Already processed?) then (Yes)
+  :Acknowledge message;
+  :Skip duplicate;
+  stop
+else (No)
+endif
+
+:Update processing status = PROCESSING;
+:Prepare sale transaction;
+:Save sale_transaction;
+
+if (Sale saved?) then (Yes)
+else (No)
+  :Mark processing FAILED;
+  :Retry consume later / move to DLQ;
+  stop
+endif
+
+:Save commission_transaction;
+if (Commission saved?) then (Yes)
+else (No)
+  :Mark commission status = RETRY / FAILED;
+  :Retry or reconcile later;
+endif
+
+:Prepare print payload;
+:Save print_summary / reprint data;
+
+if (Print data saved?) then (Yes)
+else (No)
+  :Mark print data persistence = FAILED;
+endif
+
+:Send print request;
+
+if (Print success?) then (Yes)
+  :Update sale status = SUCCESS;
+  :Save processing history (SUCCESS);
+  :Acknowledge message;
+else (No)
+  :Update sale status = PRINT_FAILED;
+  :Save processing history (PRINT_FAILED);
+  :Send to retry / reprint queue or manual reconciliation;
+endif
+
+stop
+@enduml
