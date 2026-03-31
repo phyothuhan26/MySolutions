@@ -1,0 +1,36 @@
+@startuml
+title Order Delivery and Invoice Flow - Sequence Diagram
+
+actor User
+participant "POS A" as POS
+participant "Delivery B" as Delivery
+hide footbox
+User -> POS : Create order
+activate POS
+
+POS -> POS : Change order status = Ordered
+
+POS -> Delivery : Delivery API\nSend order details
+activate Delivery
+
+Delivery -> Delivery : Receive order\nSet status = Pending
+Delivery -> Delivery : Perform cargo process
+Delivery -> Delivery : Change order status = Shipped
+
+Delivery -> POS : deliverDone API\nNotify shipped status
+deactivate Delivery
+
+POS -> POS : Change order status = Shipped
+
+POS -> Delivery : Request delivery invoice
+activate Delivery
+
+Delivery -> Delivery : Generate PDF invoice
+Delivery -> POS : Send invoice API\nPDF invoice
+deactivate Delivery
+
+POS -> POS : Receive and process invoice
+POS -> User : Show invoice / result to customer
+deactivate POS
+
+@enduml

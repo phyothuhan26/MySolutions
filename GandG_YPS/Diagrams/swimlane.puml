@@ -1,0 +1,37 @@
+@startuml
+title Order Delivery and Invoice Flow - Swimlane Diagram
+
+|User|
+start
+:Create order in POS A;
+
+|POS A|
+:Create order record;
+:Change order status to Ordered;
+:Call Delivery API to Delivery B;
+
+|Delivery B|
+:Receive order;
+:Set order status to Pending;
+:Perform cargo process;
+:Change order status to Shipped;
+:Call deliverDone API to POS A;
+
+|POS A|
+:Receive shipped notification;
+:Change order status to Shipped;
+:Request delivery invoice from Delivery B;
+
+|Delivery B|
+:Generate PDF invoice;
+:Send invoice to POS A via invoice API;
+
+|POS A|
+:Receive invoice;
+:Process invoice;
+:Show invoice to customer;
+
+|User|
+stop
+
+@enduml

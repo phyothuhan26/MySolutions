@@ -1,0 +1,95 @@
+@startuml
+title YPS Top Up - ARB Swimlane (Final Clean Version)
+
+|YPS External|
+start
+:Send YPS Bill Request;
+
+|YPS Service|
+:Receive Request;
+:Validate Request + Signature;
+
+if (Valid?) then (Yes)
+else (No)
+  :Return Fail Response;
+  stop
+endif
+
+:Check Duplicate (Idempotency);
+if (Duplicate?) then (Yes)
+  :Return Existing Result;
+  stop
+endif
+
+:Load bill/product/store (Cache);
+if (Cache miss?) then (Yes)
+  :Fetch from DB;
+endif
+
+:Apply default store/workshift if needed;
+:Prepare Event Payload;
+
+:Save Outbox (NEW);
+:Return Accepted Response;
+
+|Outbox Publisher|
+:Read Outbox;
+:Publish to RabbitMQ;
+
+if (Publish Success?) then (Yes)
+  :Update Outbox = SENT;
+else (No)
+  :Retry Publish (Scheduler);
+  stop
+endif
+
+|RabbitMQ|
+:Queue Message;
+
+|Sale Service|
+:Consume Message;
+
+:Check Idempotency;
+if (Already processed?) then (Yes)
+  :Skip;
+  stop
+endif
+
+:Process Sale Transaction;
+
+if (Processing Success?) then (Yes)
+  :Save Sale + Commission;
+  :Prepare Print Data;
+  :Print Voucher;
+
+  if (Print Success?) then (Yes)
+    :Update Status = SUCCESS;
+  else (No)
+    :Update Status = PRINT_FAILED;
+    :Send to Reprint / Retry;
+  endif
+
+  :Save Processing History;
+  stop
+
+else (No)
+  :Check Error Type;
+
+  if (Retryable?) then (Yes)
+    :Increase Retry Count;
+
+    if (Retry limit exceeded?) then (Yes)
+      :Send to DLQ;
+      :Notify Support;
+    else (No)
+      :Send to Retry Queue (with delay);
+    endif
+
+  else (No)
+    :Send to DLQ;
+    :Notify Support;
+  endif
+endif
+
+stop
+@enduml

@@ -1,0 +1,99 @@
+@startuml
+title YPS TopUp - Swimlane with Cache TTL Strategy (Improved)
+
+|YPS External|
+start
+:Send YPS Bill Data;
+
+|YPS Entry Service|
+:Receive Request;
+:Validate Signature & Required Fields;
+
+if (Invalid?) then (Yes)
+    :Return FAIL Response;
+    stop
+endif
+
+:Load from Redis Cache;
+
+note right
+Cache TTL Strategy:
+- Product → 24h
+- Bill → 6h
+- Store → 1h
+- WorkShift → No cache / 5min
+end note
+
+if (Cache Miss?) then (Yes)
+    :Load from Database;
+
+    :Update Redis Cache;
+
+    note right
+    Cache-Aside Pattern:
+    1. Read → Redis
+    2. Miss → DB
+    3. Save → Redis (with TTL)
+    end note
+endif
+
+:Build SaleEvent;
+
+:Save Event to Outbox Table;
+
+note right
+Outbox Pattern:
+- DB + Outbox in same transaction
+- Ensure no data loss
+end note
+
+:Return SUCCESS Response (Async);
+
+|Outbox Publisher|
+:Poll Outbox Table;
+:Publish Event to MQ;
+
+:Mark as Published;
+
+|Message Queue (RabbitMQ/Kafka)|
+:Queue / Topic;
+
+|Sale Service (Consumer)|
+:Consume SaleEvent;
+
+:Check Idempotency;
+
+note right
+Idempotency:
+- Use transactionSerialNumber
+- Prevent duplicate transaction
+end note
+
+if (Duplicate?) then (Yes)
+    :Ignore Message;
+    stop
+endif
+
+:Process Sale Transaction;
+
+:Save to Database;
+
+if (Fail?) then (Yes)
+    :Retry Message;
+
+    if (Max Retry Exceeded?) then (Yes)
+        :Move to DLQ;
+    endif
+
+    stop
+endif
+
+:Publish Print Event;
+
+|Print Service|
+:Consume Print Event;
+:Generate Print Data;
+:Store Print Info;
+
+stop
+@enduml

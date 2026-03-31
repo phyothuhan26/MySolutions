@@ -1,0 +1,21 @@
+@startuml
+title MS-ERP <> Haulmetic-ERP Order and Payment Flow
+hide footbox
+actor User
+participant "MS-ERP" as MS
+participant "Haulmetic-ERP" as HM
+
+==  Order Creation ==
+User -> MS: Create Transfer Order
+MS -> MS: Transfer Order Created
+MS->HM :request Order for shipping
+HM -> HM: Create Order Request\nStatus = Pending Order
+
+== Shipping Process ==
+
+HM -> HM: Cargo Loading Done\nStatus = In Transit / In Progress
+HM -> MS: Send status update\n(cargoloading done)
+MS -> MS: change order status as shipping
+
+
+@enduml

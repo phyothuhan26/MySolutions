@@ -1,0 +1,24 @@
+@startuml
+title MS-ERP <> Haulmetic-ERP Swimlane Flow
+
+|User|
+start
+:Create Transfer Order;
+
+|MS-ERP|
+:Transfer Order Created;
+:Request Order for Shipping;
+
+|Haulmetic-ERP|
+:Create Order Request;
+:Set Status = Pending Order;
+
+:Cargo Loading Done;
+:Set Status = In Transit / In Progress;
+:Send Status Update to MS-ERP;
+
+|MS-ERP|
+:Change Order Status = Shipping;
+
+stop
+@enduml
