@@ -1,0 +1,5 @@
+1.G&G Revamp Arb at April-3-2026 PASS -> Proceed Phase 1
+2.Deploy yps containment (pushmoney clean code seperation ) at April-3-2026 ->status success
+3.Scheduler deploy(remove transaction) at April-6-2026
+4.Phase 1 ->database archive at April 8 2026
+---IN GNG ----In phase 1 ->server check ,retention governamce , high impact business table move , server resize
