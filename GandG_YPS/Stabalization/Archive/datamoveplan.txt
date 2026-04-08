@@ -1,0 +1,52 @@
+
+1.Data Move ( 1 testing) (Stabalization Task )
+2.YPS Manual Input ( 2 day )
+3.EService Code refactor (Stabalization) 
+
+
+--Data Move---
+1. Back up database for G&G eservice(SRE)
+2.Copy structure and create new table for following table with name_new
+ example print_summary_new
+ 2.1 CREATE TABLE print_summary_new LIKE print_summary; //remaining 5 table
+  
+3. build index on require table
+  3.1  CREATE INDEX idx_storecode_status_workshift_action //require for 1 table
+ON work_shift_action_new(Store_code, status);
+4. Move data from original table to new table as plan 
+   ---Print Summary-----
+   select count(*) from  print_summary WHERE Date(shift_start_date) >= '2025-12-01'; 
+   
+      INSERT INTO print_summary_new
+      SELECT *
+      FROM print_summary
+      WHERE created_date >=  '2025-12-01'; 
+
+
+      Delete  from print_summary   WHERE created_date >=  '2025-12-01'; 
+
+
+
+ // if row count is greater than 400000 use date between per month  
+5. change original table name as left plan date and new table to original name
+
+    5.1. print_summary to print_summary_old
+    5.2 print_summary_new to print_summary
+    example 
+     RENAME TABLE print_summary TO print_summary_old,
+             print_summary_new TO print_summary;
+    5.3 validate count after moving data between table
+            SELECT COUNT(*) 
+         FROM print_summary_old
+         WHERE created_date >= '2026-01-01';
+
+         SELECT COUNT(*) 
+         FROM print_summary;
+6. Count max id on new table and set new increment as maxid+1
+   6.1 Select Max(id) from print_summary
+   6.2  ALTER TABLE print_summary AUTO_INCREMENT = (max_id + 1);
+
+
+
+
+ 
