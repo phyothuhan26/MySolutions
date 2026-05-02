@@ -19,8 +19,7 @@ ON work_shift_action_new(Store_code, status);
       SELECT *
       FROM print_summary
       WHERE shift_start_date >=  '2025-12-01'; 
----before delete validate count first
-     Delete  from print_summary   WHERE shift_start_date >=  '2025-12-01';
+
  ---YPS Integration-----
          select count(*) from  integration_history WHERE request_date >= '2025-09-01'; 
    
@@ -29,7 +28,7 @@ ON work_shift_action_new(Store_code, status);
       FROM integration_history
       WHERE request_date >=  '2025-09-01'; 
 
-     Delete  from integration_history   WHERE request_date >=  '2025-09-01';
+  
 
  ---Prefunding-----
          select count(*) from  prefunding_log WHERE log_datetime >= '2025-09-01'; 
@@ -39,7 +38,7 @@ ON work_shift_action_new(Store_code, status);
       FROM prefunding_log
       WHERE log_datetime >=  '2025-09-01'; 
 
-     Delete  from prefunding_log   WHERE log_datetime >=  '2025-09-01'; 
+   
 
  ---Trigger Log-----
          select count(*) from  trigger_log WHERE log_time >= '2025-09-01'; 
@@ -49,7 +48,7 @@ ON work_shift_action_new(Store_code, status);
       FROM trigger_log
       WHERE log_time >=  '2025-09-01'; 
 
-       Delete  from trigger_log   WHERE log_time >=  '2025-09-01'; 
+     
 
        ---workshift action-----
          select count(*) from  work_shift_action WHERE shift_start_on >= '2025-09-01'; 
@@ -59,22 +58,38 @@ ON work_shift_action_new(Store_code, status);
       FROM work_shift_action
       WHERE shift_start_on >=  '2025-09-01'; 
 
-        Delete  from work_shift_action   WHERE shift_start_on >=  '2025-09-01'; 
+        
 
      ---reprint-----
-        SELECT min(id) from sale_transaction where trans_date>='2026-03-01'
+        SELECT min(id) from sale_transaction where trans_date>='2025-12-01'
 
         select count(*) 
       FROM re_print
-      WHERE sale_transaction_id >=  57223725
+      WHERE sale_transaction_id >=  56395093
    
       INSERT INTO re_print_new
       SELECT *
       FROM re_print
-      WHERE sale_transaction_id >=  57223725; 
+      WHERE sale_transaction_id >=  ; 56395093
 
- Delete  from re_print   WHERE sale_transaction_id >= 57223725; 
-      5.2 
+ 
+ 5.1 Validate
+      SELECT COUNT(*) 
+         FROM print_summary_old
+         WHERE created_date >= '2025-12-01';
+
+         SELECT COUNT(*) 
+         FROM print_summary;
+
+ 5.2 Delete
+  Delete  from print_summary   WHERE shift_start_date >='2025-12-01'; 
+   Delete  from integration_history   WHERE request_date >=  '2025-09-01'; 
+  Delete  from prefunding_log   WHERE log_datetime >=  '2025-09-01'; 
+  Delete  from trigger_log   WHERE log_time >=  '2025-09-01'; 
+Delete  from work_shift_action   WHERE shift_start_on >=  '2025-09-01'; 
+Delete  from re_print   WHERE sale_transaction_id >= 56395093; 
+
+6.Rename
 
       RENAME TABLE 
     print_summary TO print_summary_old,
@@ -95,7 +110,7 @@ ON work_shift_action_new(Store_code, status);
     re_print TO re_print__old,
     re_print_new TO re_print;
         
-6.
+7.AUTO_INCREMENT
 ----print_summary----------
  Select Max(id) from print_summary
 ALTER TABLE print_summary AUTO_INCREMENT = (max_id + 1);
@@ -125,5 +140,3 @@ ALTER TABLE prefunding_log AUTO_INCREMENT = (max_id + 1);
 
 
 
-SET SQL_SAFE_UPDATES = 0;
-SET SQL_SAFE_UPDATES = 1;

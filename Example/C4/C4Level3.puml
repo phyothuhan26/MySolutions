@@ -32,3 +32,4 @@ Rel(outbox, bus, "Publishes", "Kafka")
 @enduml
 
 
+

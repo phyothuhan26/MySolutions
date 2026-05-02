@@ -1,0 +1,54 @@
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+
+actor "Branch / Ops User" as Ops
+actor "Compliance Officer" as Compliance
+actor "Core Banking / Wallet / Internal Systems" as Source
+actor "External Risk Data Sources" as RiskSource
+actor "Regulator\n(MFIU / CBM)" as Regulator
+
+rectangle "CTZPay AML System" {
+  usecase "Manage Customer /\nTransaction Data" as UC1
+  usecase "Perform Screening" as UC2
+  usecase "Assess Risk &\nMonitor Transactions" as UC3
+  usecase "Manage Alerts /\nCases" as UC4
+  usecase "Generate STR" as UC5
+  usecase "Generate TTR" as UC6
+  usecase "Manage Watchlists /\nRisk Lists" as UC7
+  usecase "View Reports /\nDashboard" as UC8
+  usecase "Manage Users /\nRoles" as UC9
+  usecase "Maintain Audit Log" as UC10
+  usecase "Submit Reports to\nRegulator" as UC11
+}
+
+Ops --> UC1
+Ops --> UC2
+Ops --> UC8
+
+Compliance --> UC4
+Compliance --> UC5
+Compliance --> UC6
+Compliance --> UC7
+Compliance --> UC8
+Compliance --> UC9
+
+Source --> UC1
+RiskSource --> UC7
+Regulator <-- UC11
+
+UC2 --> UC3
+UC3 --> UC4
+UC4 --> UC5
+UC6 --> UC11
+UC5 --> UC11
+UC1 --> UC10
+UC2 --> UC10
+UC3 --> UC10
+UC4 --> UC10
+UC5 --> UC10
+UC6 --> UC10
+UC7 --> UC10
+UC8 --> UC10
+UC9 --> UC10
+@enduml

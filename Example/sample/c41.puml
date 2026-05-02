@@ -1,0 +1,19 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+title C4 Level 1 - Search Engine System Context
+
+Person(user, "End User", "Searches using text, image, or video")
+Person(admin, "Data Operator", "Uploads and manages searchable data")
+
+System(searchSystem, "Search Engine System", "Provides fast search, indexing, caching, and synchronization")
+
+System_Ext(externalData, "External Data Sources", "APIs, file server, CSV/Excel data")
+System_Ext(cdn, "CDN", "Caches static content and search-related resources")
+
+Rel(user, searchSystem, "Search request / view result", "HTTPS")
+Rel(admin, searchSystem, "Upload data / manage rules", "HTTPS")
+Rel(externalData, searchSystem, "Provide data for indexing", "API / File")
+Rel(searchSystem, cdn, "Cache static/search resources")
+
+@enduml

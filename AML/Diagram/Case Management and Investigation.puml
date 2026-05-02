@@ -1,0 +1,28 @@
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+
+actor "Compliance Officer" as Compliance
+
+rectangle "Case Management Module" {
+  usecase "View Alert Queue" as UC1
+  usecase "Open Case" as UC2
+  usecase "Review Customer /\nTransaction Details" as UC3
+  usecase "Add Investigation Notes" as UC4
+  usecase "Request Additional Review" as UC5
+  usecase "Close Case - False Positive" as UC6
+  usecase "Confirm Suspicious Case" as UC7
+}
+
+Compliance --> UC1
+Compliance --> UC2
+Compliance --> UC3
+Compliance --> UC4
+Compliance --> UC5
+Compliance --> UC6
+Compliance --> UC7
+
+UC2 .> UC3 : <<include>>
+UC2 .> UC4 : <<include>>
+UC7 .> UC4 : <<include>>
+@enduml

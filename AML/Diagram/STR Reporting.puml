@@ -1,0 +1,26 @@
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+
+actor "Compliance Officer" as Compliance
+actor "Regulator\n(MFIU / CBM)" as Regulator
+
+rectangle "STR Reporting Module" {
+  usecase "Prepare STR" as UC1
+  usecase "Collect Case Evidence" as UC2
+  usecase "Generate STR File\n(XML / Excel / PGP)" as UC3
+  usecase "Review STR" as UC4
+  usecase "Submit STR to Regulator" as UC5
+  usecase "Track Submission Status" as UC6
+}
+
+Compliance --> UC1
+Compliance --> UC4
+Compliance --> UC5
+Compliance --> UC6
+Regulator <-- UC5
+
+UC1 .> UC2 : <<include>>
+UC1 .> UC3 : <<include>>
+UC4 .> UC5 : <<include>>
+@enduml

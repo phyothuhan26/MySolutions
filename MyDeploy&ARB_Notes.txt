@@ -3,3 +3,5 @@
 3.Scheduler deploy(remove transaction) at April-6-2026
 4.Phase 1 ->database archive at April 8 2026
 ---IN GNG ----In phase 1 ->server check ,retention governamce , high impact business table move , server resize
+5.discuss with AML  for arb at DAN on April 8 -->Moderate ( not good sound)
+6.Data base sizing at April 9 2026 (temporary solution ) , move low business dependency data to table

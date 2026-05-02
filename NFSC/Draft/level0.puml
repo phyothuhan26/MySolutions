@@ -1,0 +1,18 @@
+@startuml
+title Simple Search Engine Context
+
+actor User
+rectangle "Search System" {
+}
+
+rectangle "Source System" {
+}
+
+rectangle "Auth System" {
+}
+
+User --> "Search System" : Search request
+"Search System" --> "Source System" : Fetch data
+"Search System" --> "Auth System" : Validate token
+
+@enduml

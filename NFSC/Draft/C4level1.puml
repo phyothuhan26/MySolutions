@@ -1,0 +1,27 @@
+ @startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Terminal System - NFSC Container Diagram
+
+Person(user, "NFSC User / Operator", "Monitor oil status, PO approval, GPS, and shop sales")
+
+System_Boundary(nfsc_boundary, "NFSC System") {
+    Container(nfsc_app, "NFSC Application", "Web/API Application", "Receives and manages oil terminal status, PO approval, GPS, and shop sales data")
+    ContainerDb(nfsc_db, "NFSC Database", "Relational Database", "Stores warehouse, PO, truck GPS, and shop sales data")
+}
+
+System_Ext(warehouse, "Warehouse System", "Sends terminal oil status")
+System_Ext(appcom, "App.com", "Sends PO approved data")
+System_Ext(gps, "GPS Provider", "Sends truck GPS data")
+System_Ext(shops, "Shops / POS", "Sends shop sale data")
+
+Rel(user, nfsc_app, "Uses / monitors")
+Rel(warehouse, nfsc_app, "Send terminal oil status", "API / Batch / Event")
+Rel(appcom, nfsc_app, "Send PO approved data", "API / Batch / Event")
+Rel(gps, nfsc_app, "Send GPS data", "API / Scheduled Polling / Event")
+Rel(shops, nfsc_app, "Send shop sale data", "API / Batch / Event")
+
+Rel(nfsc_app, nfsc_db, "Read / Write data")
+
+@enduml
+

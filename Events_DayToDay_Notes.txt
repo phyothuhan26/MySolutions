@@ -1,0 +1,3 @@
+April-8 Discuss with poe ei for log request(receive) and method request (examin code ) for manual import(Still not receive)
+        Jasper Report ( data dynamic fetch result ) Discuss (Merchant Portal Biller Report)
+ 

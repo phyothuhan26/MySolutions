@@ -1,0 +1,35 @@
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+
+actor "Branch / Ops User" as Ops
+actor "Core Banking / Wallet /\nInternal Systems" as Source
+actor "External Risk Data Sources" as RiskSource
+
+rectangle "Screening Module" {
+  usecase "Receive Customer /\nTransaction Data" as UC1
+  usecase "Screen Customer" as UC2
+  usecase "Screen Transaction" as UC3
+  usecase "Match Against\nInternational Lists" as UC4
+  usecase "Match Against\nDomestic Lists" as UC5
+  usecase "Calculate Match Score" as UC6
+  usecase "Return Screening Result" as UC7
+}
+
+Ops --> UC2
+Ops --> UC3
+Source --> UC1
+RiskSource --> UC4
+RiskSource --> UC5
+
+UC2 .> UC4 : <<include>>
+UC2 .> UC5 : <<include>>
+UC2 .> UC6 : <<include>>
+UC3 .> UC4 : <<include>>
+UC3 .> UC5 : <<include>>
+UC3 .> UC6 : <<include>>
+UC1 --> UC2
+UC1 --> UC3
+UC2 --> UC7
+UC3 --> UC7
+@enduml

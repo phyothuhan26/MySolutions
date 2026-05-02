@@ -1,0 +1,26 @@
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+
+actor "Compliance Officer" as Compliance
+actor "System Scheduler" as Scheduler
+actor "Regulator\n(MFIU / CBM)" as Regulator
+
+rectangle "TTR Reporting Module" {
+  usecase "Identify Threshold Transactions" as UC1
+  usecase "Generate Daily /\nT+1 TTR Report" as UC2
+  usecase "Review TTR Report" as UC3
+  usecase "Submit TTR to Regulator" as UC4
+  usecase "Track Submission Status" as UC5
+}
+
+Scheduler --> UC1
+Scheduler --> UC2
+Compliance --> UC3
+Compliance --> UC4
+Compliance --> UC5
+Regulator <-- UC4
+
+UC1 .> UC2 : <<include>>
+UC3 .> UC4 : <<include>>
+@enduml
